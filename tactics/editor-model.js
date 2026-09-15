@@ -1,0 +1,31 @@
+import {GROUNDS,PROPS,EDGES,propAt,propCells,floorTerrain} from './environment.js';
+import {W,H,stampRoom,tileKey,levelOf,terrainAt,setTerrain,addStairs,MAX_GUARDS,roofTop,roofValid,roofEndpoint,edgeCells,passable,blockedEdge,inBounds} from './maps.js';
+export function createEditor(map){return {map:structuredClone(map),undo:[],redo:[],before:null};}
+export function beginStroke(editor){if(!editor.before)editor.before=structuredClone(editor.map);}
+export function endStroke(editor){if(!editor.before)return false;const before=editor.before;editor.before=null;if(JSON.stringify(before)===JSON.stringify(editor.map))return false;editor.undo.push(before);if(editor.undo.length>50)editor.undo.shift();editor.redo=[];return true;}
+export function replaceMap(editor,map){beginStroke(editor);editor.map=structuredClone(map);endStroke(editor);}
+export function undo(editor){endStroke(editor);if(!editor.undo.length)return false;editor.redo.push(editor.map);editor.map=editor.undo.pop();return true;}
+export function redo(editor){endStroke(editor);if(!editor.redo.length)return false;editor.undo.push(editor.map);editor.map=editor.redo.pop();return true;}
+export function applyBrush(editor,tool,x,y,edge,options={}) {
+ const m=editor.map,z=options.level??0;if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||y<0||x>=W||y>=H)return 'Choose a tile inside the map.';
+ const guard=m.guards.find(g=>g.x===x&&g.y===y&&levelOf(g)===z),start=m.starts.findIndex(p=>p.x===x&&p.y===y&&levelOf(p)===z),exit=m.exits.some(p=>p.x===x&&p.y===y&&levelOf(p)===z);
+ if(['wall','door','erase-edge'].includes(tool)){
+  if(!/^(e|s):-?\d+:-?\d+(?::[12])?$/.test(edge))return 'Choose a tile edge.';
+  if(tool==='erase-edge')delete m.edges[edge];else m.edges[edge]=tool==='wall'?(Object.hasOwn(EDGES,options.edgeKind)?options.edgeKind:'wall'):tool;return '';
+ }
+ if(tool==='roof'){if(z>=2)return 'Roof climbs begin on level 1 or 2.';if(!/^(e|s):-?\d+:-?\d+(?::[12])?$/.test(edge))return 'Choose a tile edge.';const cells=edgeCells(edge),other=cells.find(p=>p.x!==x||p.y!==y);if(!other||!cells.some(p=>p.x===x&&p.y===y&&p.z===z))return 'Choose the edge beside the lower foothold.';const p={x,y,z,dx:other.x-x,dy:other.y-y};if(!roofValid(m,p))return 'Paint an adjacent upper roof first. Keep the foothold overhead empty and the upper edge open.';if((m.climbs||[]).length>=4096)return 'Maximum roof climbs reached.';m.climbs=[...(m.climbs||[]).filter(q=>!(q.x===x&&q.y===y&&q.z===z&&q.dx===p.dx&&q.dy===p.dy)),p];return '';}
+ if(tool==='erase-roof'){m.climbs=(m.climbs||[]).filter(p=>![p,roofTop(p)].some(q=>q.x===x&&q.y===y&&q.z===z));return '';}
+ if(tool==='stairs'||tool==='ladder'){if(roofEndpoint(m,{x,y,z})||roofEndpoint(m,{x,y,z:z+1}))return 'Remove the roof climb before adding stairs here.';if(z===2)return 'Stairs must begin on level 1 or 2.';if([z,z+1].some(l=>terrainAt(m,x,y,l)==='crate'||propAt(m,x,y,l)))return 'Remove crates from both stair endpoints first.';addStairs(m,x,y,z,tool==='ladder'?'ladder':'stairs');return '';}
+ if(tool==='erase-stairs'){m.stairs=m.stairs.filter(p=>!(p.x===x&&p.y===y&&(p.z===z||p.z+1===z)));return '';}
+ if(tool==='erase-prop'){const p=propAt(m,x,y,z);m.props=(m.props||[]).filter(q=>q!==p);return '';}
+ if(tool==='prop'){const kind=options.propKind;if(!Object.hasOwn(PROPS,kind))return 'Choose an environment prop.';const p={x,y,z,kind,rotated:!!options.rotated},cells=propCells(p);if((m.props||[]).length>=4096)return 'The map supports at most 4096 props.';for(const q of cells){if(!inBounds(q.x,q.y,q.z)||!floorTerrain(terrainAt(m,q.x,q.y,q.z))||propAt(m,q.x,q.y,q.z))return 'The entire prop footprint needs free, supported floor.';if(roofEndpoint(m,q)||[...m.starts,...m.guards,...m.exits].some(a=>a.x===q.x&&a.y===q.y&&levelOf(a)===z)||m.stairs.some(a=>a.x===q.x&&a.y===q.y&&(a.z===z||a.z+1===z)))return 'Move starts, travel markers and stairs before placing a prop.';}if(cells.length>1&&blockedEdge(m,cells[0],cells[1]))return 'Props cannot straddle a wall or fence.';m.props=[...(m.props||[]),p];return '';}
+ if(tool==='texture'){if(!GROUNDS.includes(options.groundKind))return 'Choose a ground texture.';setTerrain(m,x,y,z,options.groundKind);return '';}
+ if(['yard','floor','crate','void','water','bridge'].includes(tool)){if(tool==='water'&&z!==0)return 'Water belongs on the ground level.';if(['crate','void','water'].includes(tool)&&(roofEndpoint(m,{x,y,z})||guard||start>=0||exit||propAt(m,x,y,z)||m.stairs.some(p=>p.x===x&&p.y===y&&(p.z===z||p.z+1===z))))return 'Move starts, travel markers and stairs before blocking this tile.';setTerrain(m,x,y,z,tool);return '';}
+ if(tool==='room'){const width=options.rotated?options.height:options.width,height=options.rotated?options.width:options.height;return stampRoom(m,x,y,width||6,height||5,z)?'':'The whole room must fit inside the map.';}
+ if(tool==='remove-guard'){m.guards=m.guards.filter(g=>g!==guard);return '';}
+ if(!passable(m,{x,y,z}))return 'Place a floor before placing a start or travel marker.';
+ if(tool==='squad'){const id=Number(options.slot);if(!Number.isInteger(id)||id<0||id>3)return 'Choose squad member 1–4.';if(guard||(start>=0&&start!==id))return 'Another unit starts here.';m.starts[id]={x,y,z};return '';}
+ if(tool==='guard'){if(start>=0)return 'A squad member starts here.';if(!guard&&m.guards.length>=MAX_GUARDS)return 'Maximum 46 guards (50 characters total). Remove one before placing another.';const next={x,y,z,species:options.species||'pig-foreman',weapon:options.weapon||'pistol'};if(guard)Object.assign(guard,next);else m.guards.push(next);return '';}
+ if(tool==='exit'){m.exits=[{x,y,z}];return '';}
+ return 'Choose a placement tool.';
+}
