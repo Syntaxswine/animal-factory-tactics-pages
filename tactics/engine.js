@@ -1,5 +1,7 @@
-import {PROPS,EDGES,propAt,propTall} from './environment.js';
-import {W,H,factoryMap,validateMap,blockedEdge,levelOf,tileKey,terrainAt,neighbors,stairSet,canStep,LEVELS,passable,sightEdge,edgeBetween} from './maps.js';
+import {terrainVisibility,TERRAIN_RANGE,CHARACTER_RANGE} from './visibility.js';
+export {TERRAIN_RANGE,CHARACTER_RANGE} from './visibility.js';
+import {PROPS,EDGES,propAt,propTall,propCells} from './environment.js';
+import {W,H,factoryMap,validateMap,blockedEdge,levelOf,tileKey,terrainAt,neighbors,stairSet,canStep,LEVELS,passable,sightEdge,edgeBetween,edgeCells,inBounds} from './maps.js';
 export {W,H} from './maps.js';
 export const WEAPONS={
  hands:{name:'Workers’ fists',short:'Hands',cost:3,range:1,damage:16,mag:0},
@@ -22,7 +24,7 @@ export const walkable=(s,x,y,z=0)=>passable(s,{x,y,z});
 export function log(s,message){s.log.unshift(message);s.log=s.log.slice(0,50);s.revision++;}
 export function createGame(seed=1947,definition=factoryMap(),detect=true){
  const errors=validateMap(definition);if(errors.length)throw Error(errors.join(' '));
- const s={map:structuredClone(definition.terrain),upper:structuredClone(definition.upper),stairs:structuredClone(definition.stairs),climbs:structuredClone(definition.climbs||[]),props:structuredClone(definition.props||[]),sectors:structuredClone(definition.sectors),edges:{...definition.edges},definition:structuredClone(definition),units:[],phase:'explore',round:0,selected:0,visible:new Set(),seen:new Set(),log:[],seed,revision:0,queue:[],enemyIndex:0,effect:null};
+ const s={map:structuredClone(definition.terrain),upper:structuredClone(definition.upper),stairs:structuredClone(definition.stairs),climbs:structuredClone(definition.climbs||[]),props:structuredClone(definition.props||[]),sectors:structuredClone(definition.sectors),edges:{...definition.edges},definition:structuredClone(definition),units:[],phase:'explore',round:0,selected:0,visible:new Set(),seen:new Set(),detected:new Set(),log:[],seed,revision:0,queue:[],enemyIndex:0,effect:null};
  const add=(team,name,species,x,y,weapon,z=0)=>s.units.push({id:s.units.length,team,name,species,x,y,z,stance:'standing',hp:team==='squad'?100:45,maxHp:team==='squad'?100:45,ap:team==='squad'?12:7,maxAp:team==='squad'?12:7,accuracy:team==='squad'?85:55,weapon,ammo:Object.fromEntries(Object.entries(WEAPONS).map(([k,v])=>[k,v.mag])),alert:false,lastKnown:null,facing:1,steps:0});
  const cast=[['Yakov','horse','assault'],['Anya','goat','rifle'],['Misha','donkey','pistol'],['Vera','sheep','knife']];
  definition.starts.forEach((p,i)=>add('squad',cast[i][0],cast[i][1],p.x,p.y,cast[i][2],levelOf(p)));
@@ -51,7 +53,7 @@ export function pathTo(s,u,x,y,z=levelOf(u)){
  if(!walkable(s,x,y,z)||(occupant(s,x,y,z)&&occupant(s,x,y,z)!==u))return null;
  const start=key(u.x,u.y,levelOf(u)),goal=key(x,y,z),occupied=new Set(s.units.filter(p=>alive(p)&&p!==u).map(p=>key(p.x,p.y,levelOf(p)))),stairs=stairSet(s);
  const heuristic=p=>{const dx=Math.abs(p.x-x),dy=Math.abs(p.y-y);return (Math.max(dx,dy)+.5*Math.min(dx,dy))*STANCES[stanceOf(u)].moveCost+2*Math.abs(levelOf(p)-z);},heap=[],scores=new Map([[start,0]]),parents=new Map();
- const less=(a,b)=>a.f<b.f||(a.f===b.f&&a.g>b.g);
+ const deviation=p=>Math.abs((p.x-u.x)*(y-u.y)-(p.y-u.y)*(x-u.x));const less=(a,b)=>a.f<b.f||(a.f===b.f&&(deviation(a)<deviation(b)||(deviation(a)===deviation(b)&&a.g>b.g)));
  const push=n=>{heap.push(n);let i=heap.length-1;while(i){const p=(i-1)>>1;if(!less(heap[i],heap[p]))break;[heap[i],heap[p]]=[heap[p],heap[i]];i=p;}};
  const pop=()=>{const first=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let i=0;while(true){let c=i*2+1;if(c>=heap.length)break;if(c+1<heap.length&&less(heap[c+1],heap[c]))c++;if(!less(heap[c],heap[i]))break;[heap[i],heap[c]]=[heap[c],heap[i]];i=c;}}return first;};
  push({...u,z:levelOf(u),k:start,g:0,f:heuristic(u)});
@@ -59,11 +61,12 @@ export function pathTo(s,u,x,y,z=levelOf(u)){
   for(const q of movementNeighbors(s,u,p,stairs)){const k=key(q.x,q.y,q.z),g=p.g+q.cost;if(occupied.has(k)||g>=(scores.get(k)??Infinity))continue;scores.set(k,g);parents.set(k,{parent:p.k,point:q});push({...q,k,g,f:g+heuristic(q)});}
  }return null;
 }
-export const sightRange=(a,b)=>9+Math.max(0,levelOf(a)-levelOf(b));
+export const sightRange=()=>CHARACTER_RANGE;
 export const canSee=(s,a,b)=>distance(a,b)<=sightRange(a,b)&&lineOfSight(s,a,b);
 export function refresh(s){
- s.visible=new Set();for(const p of squad(s))for(let z=0;z<LEVELS;z++)for(let y=Math.max(0,p.y-11);y<=Math.min(H-1,p.y+11);y++)for(let x=Math.max(0,p.x-11);x<=Math.min(W-1,p.x+11);x++)if(canSee(s,p,{x,y,z}))s.visible.add(key(x,y,z));
- for(const k of s.visible)s.seen.add(k);
+ const oldDetected=s.detected,oldVisible=s.visible;s.visible=terrainVisibility(s,squad(s));s.detected=new Set(guards(s).filter(g=>squad(s).some(p=>canSee(s,p,g))).map(g=>g.id));
+ if(s.queue.length&&[...s.detected].some(id=>!oldDetected.has(id))){s.queue=[];log(s,'Movement stopped: new opponent spotted.');}
+ if(s.visible!==oldVisible||s.seen.size<s.visible.size)for(const k of s.visible)s.seen.add(k);
  if(!squad(s).length){if(s.phase!=='lost')log(s,'The squad has fallen. Restart the test to try again.');s.phase='lost';s.queue=[];return;}
  if(!alive(s.units[s.selected]))s.selected=squad(s)[0].id;
  if(!guards(s).length){if(s.phase!=='won'){log(s,'Local map cleared. Explore or gather at the travel marker.');s.queue=[];}s.phase='won';s.revision++;return;}
@@ -79,14 +82,18 @@ export function setStance(s,u,stance){
  if(!Object.hasOwn(STANCES,stance)||!canControl(s,u)||s.queue.length||stanceOf(u)===stance||(s.phase==='player'&&u.ap<2))return false;
  if(s.phase==='player')u.ap-=2;u.stance=stance;log(s,u.name+' is '+stance+'.');return true;
 }
+
+export function navigationState(s){const known=p=>s.seen.has(key(p.x,p.y,levelOf(p))),knowledge=new Set(s.seen);for(const p of s.climbs)if(known(p)||known({x:p.x+p.dx,y:p.y+p.dy,z:p.z+1}))for(const q of [p,{x:p.x,y:p.y,z:p.z+1},{x:p.x+p.dx,y:p.y+p.dy,z:p.z+1}])knowledge.add(key(q.x,q.y,q.z));return {...s,knowledge,edges:Object.fromEntries(Object.entries(s.edges).filter(([k])=>edgeCells(k).some(known))),props:s.props.filter(p=>propCells(p).some(known)),stairs:s.stairs.filter(p=>known(p)||known({...p,z:p.z+1})),climbs:s.climbs.filter(p=>known(p)||known({x:p.x+p.dx,y:p.y+p.dy,z:p.z+1})),units:s.units.filter(p=>p.team==='squad'||s.detected.has(p.id))};}
+export function navigationPath(s,u,x,y,z=levelOf(u)){if(!inBounds(x,y,z))return null;return pathTo(navigationState(s),u,x,y,z);}
+
 export function move(s,u,x,y,z=levelOf(u)){
- if(!canControl(s,u))return false;const path=pathTo(s,u,x,y,z);if(!path?.length)return false;
- if(s.phase==='player'&&pathCost(path)>u.ap)return false;
- s.queue=path.map(p=>({id:u.id,...p}));return true;
+ if(!canControl(s,u))return false;const path=navigationPath(s,u,x,y,z);if(!path?.length)return false;
+ if(s.phase==='player'&&path[0].cost>u.ap)return false;
+ s.queue=path.map(p=>({id:u.id,...p,goal:{x,y,z}}));return true;
 }
 export function stepMovement(s){
  if(!s.queue.length||!['explore','player','won'].includes(s.phase))return false;
- const step=s.queue.shift(),u=s.units[step.id],currentStep=u&&movementNeighbors(s,u).find(p=>p.x===step.x&&p.y===step.y&&p.z===levelOf(step));if(!canControl(s,u)||!currentStep||occupant(s,step.x,step.y,levelOf(step))||(s.phase==='player'&&u.ap<currentStep.cost)){s.queue=[];return false;}
+ let step=s.queue[0];const actor=s.units[step.id];if(step.goal&&canControl(s,actor)){const goal=step.goal,path=navigationPath(s,actor,goal.x,goal.y,goal.z);if(!path?.length){s.queue=[];log(s,'Route stopped: destination reached or no discovered route remains.');return false;}s.queue=path.map(p=>({id:actor.id,...p,goal}));}step=s.queue.shift();const u=s.units[step.id],currentStep=u&&movementNeighbors(s,u).find(p=>p.x===step.x&&p.y===step.y&&p.z===levelOf(step));if(!canControl(s,u)||!currentStep||occupant(s,step.x,step.y,levelOf(step))||(s.phase==='player'&&u.ap<currentStep.cost)){s.queue=[];return false;}
  u.facing=(step.x-u.x)-(step.y-u.y)>=0?1:-1;u.x=step.x;u.y=step.y;u.z=levelOf(step);u.steps++;if(s.phase==='player')u.ap-=currentStep.cost;refresh(s);return true;
 }
 export function coverAgainst(s,a,b){
@@ -96,7 +103,7 @@ export function coverAgainst(s,a,b){
 export function previewAttack(s,a,b,burst=false){
  if(!a||!b||!alive(a)||!alive(b)||a.team===b.team)return {ok:false,reason:'Choose a living opponent'};
  const w=WEAPONS[a.weapon],rounds=burst&&a.weapon==='assault'?3:1,cost=w.cost+(rounds===3?2:0),melee=w.mag===0,range=melee?distance(a,b):Math.hypot(a.x-b.x,a.y-b.y);
- const visible=a.team==='squad'?s.visible.has(key(b.x,b.y,levelOf(b))):canSee(s,a,b);
+ const visible=a.team==='squad'?squad(s).some(p=>canSee(s,p,b)):canSee(s,a,b);
  const cover=!melee&&coverAgainst(s,a,b),heightCover=!melee&&levelOf(b)>levelOf(a)&&(a.x!==b.x||a.y!==b.y),coverPenalty=cover?25:heightCover?15:0,rangePenalty=melee?0:Math.max(0,levelOf(b)-levelOf(a)),effectiveRange=Math.max(0,w.range-rangePenalty);
  const chance=Math.max(10,Math.min(95,a.accuracy+(melee?10:0)-Math.max(0,range+rangePenalty-3)*3-coverPenalty-(rounds===3?10:0)));
  let reason='';
