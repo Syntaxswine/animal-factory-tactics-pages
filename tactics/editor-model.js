@@ -29,3 +29,13 @@ export function applyBrush(editor,tool,x,y,edge,options={}) {
  if(tool==='exit'){m.exits=[{x,y,z}];return '';}
  return 'Choose a placement tool.';
 }
+
+// A gesture is previewed without changing the map, then committed as one stroke.
+export function brushShape(tool){return ['wall','door','erase-edge'].includes(tool)?'line':['yard','floor','texture','water','bridge','void'].includes(tool)?'rectangle':null;}
+export function brushPoints(tool,start,end,size=W){
+ const shape=brushShape(tool),points=[],clamp=n=>Math.max(0,Math.min(size-1,n));
+ if(!shape||start.x<0||start.y<0||start.x>=size||start.y>=size)return points;
+ if(shape==='rectangle'){const x0=Math.min(start.x,clamp(end.x)),x1=Math.max(start.x,clamp(end.x)),y0=Math.min(start.y,clamp(end.y)),y1=Math.max(start.y,clamp(end.y));for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++)points.push({x,y});}
+ else {const [axis,xs,ys,zs]=start.edge.split(':'),x=Number(xs),y=Number(ys),from=axis==='e'?y:x,to=clamp(axis==='e'?end.y:end.x);for(let n=Math.min(from,to);n<=Math.max(from,to);n++){const ex=axis==='e'?x:n,ey=axis==='e'?n:y;points.push({x:clamp(ex),y:clamp(ey),edge:axis+':'+ex+':'+ey+(zs?':'+zs:'')});}}
+ return points;
+}
