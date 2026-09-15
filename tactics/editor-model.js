@@ -25,7 +25,7 @@ export function applyBrush(editor,tool,x,y,edge,options={}) {
  if(tool==='remove-guard'){m.guards=m.guards.filter(g=>g!==guard);return '';}
  if(!passable(m,{x,y,z}))return 'Place a floor before placing a start or travel marker.';
  if(tool==='squad'){const id=Number(options.slot);if(!Number.isInteger(id)||id<0||id>3)return 'Choose squad member 1–4.';if(guard||(start>=0&&start!==id))return 'Another unit starts here.';m.starts[id]={x,y,z};return '';}
- if(tool==='guard'){if(start>=0)return 'A squad member starts here.';if(!guard&&m.guards.length>=MAX_GUARDS)return 'Maximum 46 guards (50 characters total). Remove one before placing another.';const next={x,y,z,species:options.species||'pig-foreman',weapon:options.weapon||'pistol'};if(guard)Object.assign(guard,next);else m.guards.push(next);return '';}
+ if(tool==='guard'){if(start>=0)return 'A squad member starts here.';if(!guard&&m.guards.length>=MAX_GUARDS)return 'Maximum 46 guards (50 characters total). Remove one before placing another.';const next={x,y,z,species:options.species||'pig-foreman',weapon:options.weapon||'pistol'};if(options.outfit==='red-hats')next.outfit='red-hats';else if(guard)delete guard.outfit;if(guard)Object.assign(guard,next);else m.guards.push(next);return '';}
  if(tool==='exit'){m.exits=[{x,y,z}];return '';}
  return 'Choose a placement tool.';
 }

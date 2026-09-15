@@ -35,7 +35,7 @@ export function roofNeighbors(m,p){return (roofIndex(m).get(tileKey(p.x,p.y,leve
 export function roofEndpoint(m,p){return (m.climbs||[]).some(q=>[q,roofTop(q)].some(r=>r.x===p.x&&r.y===p.y&&r.z===levelOf(p)));}
 
 export function canStep(m,a,b){return neighbors(m,a).some(p=>p.x===b.x&&p.y===b.y&&p.z===levelOf(b));}
-export const SPECIES=['horse','goat','donkey','sheep','cow','hen','pig-foreman','pig-director'];
+export const SPECIES=['horse','goat','donkey','sheep','cow','hen','pig-foreman','pig-director','skunk'];
 export const WEAPON_IDS=['hands','knife','pistol','rifle','assault'];
 export function blankMap(name='Untitled local map'){
  return {version:2,width:W,height:H,levels:LEVELS,name,terrain:Array.from({length:H},()=>Array(W).fill('yard')),upper:[{},{}],edges:{},stairs:[],climbs:[],props:[],starts:[{x:3,y:4,z:0},{x:3,y:6,z:0},{x:2,y:5,z:0},{x:2,y:7,z:0}],guards:[],exits:[{x:3,y:5,z:0}]};
@@ -54,7 +54,7 @@ export function factoryMap(){
  [[12,6,'pig-foreman','pistol'],[15,5,'cow','rifle'],[16,9,'pig-foreman','pistol'],[13,9,'donkey','knife'],[21,4,'pig-foreman','assault'],[23,5,'goat','pistol'],[22,9,'cow','rifle'],[23,11,'pig-foreman','pistol'],[18,16,'pig-foreman','pistol'],[22,17,'donkey','knife'],[18,20,'cow','rifle'],[22,20,'pig-foreman','assault']].forEach(([x,y,species,weapon])=>m.guards.push({x,y,z:0,species,weapon}));
  // A visible, accessible three-level training stairwell near the squad start.
  for(let z=1;z<LEVELS;z++)stampRoom(m,1,9,5,5,z);
- addStairs(m,3,10,0);addStairs(m,3,12,1,'ladder');m.props=[{x:7,y:10,z:0,kind:'barrel-single'},{x:7,y:17,z:0,kind:'workbench-vise'},{x:4,y:16,z:0,kind:'sandbags'}];return m;
+ addStairs(m,3,10,0);addStairs(m,3,12,1,'ladder');m.props=[{x:7,y:10,z:0,kind:'barrel-single'},{x:7,y:17,z:0,kind:'workbench-vise'},{x:4,y:16,z:0,kind:'sandbags'},{x:4,y:18,z:0,kind:'hospital-bed'},{x:5,y:18,z:0,kind:'iv-stand'},{x:4,y:21,z:0,kind:'medicine-cabinet-closed'},{x:9,y:17,z:0,kind:'toolbox-open'},{x:8,y:19,z:0,kind:'spare-parts'}];return m;
 }
 const index=p=>levelOf(p)*W*H+p.y*W+p.x;
 function reachedTargets(m,targets){
@@ -72,7 +72,7 @@ export function validateMap(raw,{connectivity=true}={}){
  if(!raw.edges||typeof raw.edges!=='object'||Array.isArray(raw.edges))return [...errors,'Missing edge barriers.'];
  for(const [k,v]of Object.entries(raw.edges)){const p=/^(e|s):(-?\d+):(-?\d+)(?::([12]))?$/.exec(k);if(!p)return [...errors,'Invalid edge key.'];const x=Number(p[2]),y=Number(p[3]),z=Number(p[4]||0);if(!Object.hasOwn(EDGES,v)||k!==edgeKey(p[1],x,y,z)||(p[1]==='e'?(x< -1||x>=W||y<0||y>=H):(x<0||x>=W||y< -1||y>=H)))return [...errors,'Invalid edge location or type.'];}
  if(!Array.isArray(raw.starts)||raw.starts.length!==4||raw.starts.some(p=>!point(p)))return [...errors,'Place exactly four valid squad starts.'];
- if(!Array.isArray(raw.guards)||raw.guards.length>MAX_GUARDS||raw.guards.some(g=>!point(g)||!SPECIES.includes(g.species)||!WEAPON_IDS.includes(g.weapon)))return [...errors,'Use at most 46 guards (50 characters including the squad).'];
+ if(!Array.isArray(raw.guards)||raw.guards.length>MAX_GUARDS||raw.guards.some(g=>!point(g)||!SPECIES.includes(g.species)||!WEAPON_IDS.includes(g.weapon)||(g.outfit!==undefined&&!['normal','red-hats'].includes(g.outfit))))return [...errors,'Use at most 46 guards (50 characters including the squad).'];
  if(!Array.isArray(raw.exits)||raw.exits.length!==1||!point(raw.exits[0]))return [...errors,'Place one valid travel marker.'];
  if(!Array.isArray(raw.stairs)||raw.stairs.length>4096||raw.stairs.some(p=>!point(p)||!Number.isInteger(p.z)||p.z>=2||(p.kind!==undefined&&!['stairs','ladder'].includes(p.kind))))return [...errors,'Invalid stairs: lower level must be 0 or 1.'];
  if(raw.climbs!==undefined&&(!Array.isArray(raw.climbs)||raw.climbs.length>4096||raw.climbs.some(p=>!point(p)||!Number.isInteger(p.z)||p.z>=2||!Number.isInteger(p.dx)||!Number.isInteger(p.dy)||Math.abs(p.dx)+Math.abs(p.dy)!==1)))return [...errors,'Invalid roof climb: adjacent tiles and exactly one level required.'];
@@ -98,8 +98,8 @@ export function generateMap(seed=7,name='Generated test',population=MAX_GUARDS,o
  if(options.layout==='river')return generateRiverMap(seed,name,population,options.orientation||'ns');
  let state=Number(seed)>>>0;const random=()=>{state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;},m=blankMap(name);
  // One open workshop per sector; corridors and doors are protected from scatter.
- for(let sy=0;sy<10;sy++)for(let sx=0;sx<10;sx++){const x=sx*SECTOR+10,y=sy*SECTOR+9,w=6+Math.floor(random()*3),h=6;stampRoom(m,x,y,w,h);if((sx+sy)%4===0){for(let z=1;z<LEVELS;z++)stampRoom(m,x,y,w,h,z);addStairs(m,x+1,y+1,0);addStairs(m,x+2,y+1,1);}for(let i=0;i<3;i++){const cx=x+2+Math.floor(random()*(w-3)),cy=y+3+Math.floor(random()*2);m.terrain[cy][cx]='crate';}}
- for(let i=0;i<Math.min(MAX_GUARDS,Math.max(0,population));i++){const sector=(i*17+12)%100,sx=sector%10,sy=Math.floor(sector/10),x=sx*SECTOR+11,y=sy*SECTOR+11,z=(sx+sy)%4===0?i%3:0;m.guards.push({x,y,z,species:['pig-foreman','cow','donkey','goat'][i%4],weapon:['pistol','rifle','knife','assault'][i%4]});}return m;
+ for(let sy=0;sy<10;sy++)for(let sx=0;sx<10;sx++){const x=sx*SECTOR+10,y=sy*SECTOR+9,w=6+Math.floor(random()*3),h=6;stampRoom(m,x,y,w,h);if((sx+sy)%4===0){for(let z=1;z<LEVELS;z++)stampRoom(m,x,y,w,h,z);addStairs(m,x+1,y+1,0);addStairs(m,x+2,y+1,1);}for(let i=0;i<3;i++){const cx=x+2+Math.floor(random()*(w-3)),cy=y+3+Math.floor(random()*2);m.terrain[cy][cx]='crate';}const furnishings=['lab-bench','botanical-chamber','lab-control-console','medical-exam-table','medical-surgical-table','medicine-cabinet','hospital-bed','wheeled-stretcher','scrub-sink','iv-stand','bedside-monitor','instrument-trolley','wooden-crate-closed','supply-chest-open','toolbox-closed'];m.props.push({x:x+3,y:y+1,z:0,kind:furnishings[(sy*10+sx)%furnishings.length]});}
+ for(let i=0;i<Math.min(MAX_GUARDS,Math.max(0,population));i++){const sector=(i*17+12)%100,sx=sector%10,sy=Math.floor(sector/10),x=sx*SECTOR+11,y=sy*SECTOR+11,z=(sx+sy)%4===0?i%3:0;m.guards.push({x,y,z,species:['pig-foreman','cow','donkey','goat'][i%4],weapon:['pistol','rifle','knife','assault'][i%4],outfit:'red-hats'});}return m;
 }
 
 export function generateRiverMap(seed=7,name='River / two bridges',population=MAX_GUARDS,orientation='ns'){
@@ -111,6 +111,6 @@ export function generateRiverMap(seed=7,name='River / two bridges',population=MA
   if(type==='workshop'){const p=rotate(sx*24+6,sy*24+6);stampRoom(m,p.x,p.y,12,12);if((sx+sy)%3===0){for(let z=1;z<3;z++)stampRoom(m,p.x,p.y,12,12,z);addStairs(m,p.x+1,p.y+1,0);addStairs(m,p.x+2,p.y+1,1,'ladder');}m.props.push({x:p.x+4,y:p.y+4,z:0,kind:['crate-stack','workbench-metal','barrels-cluster'][(sx+sy)%3]});}
  }
  const sites=[];for(let sy=0;sy<10;sy++)for(let sx=0;sx<10;sx++)if(plan.cells[sy][sx]!=='river-ns'&&plan.cells[sy][sx]!=='bridge-ns')sites.push(rotate(sx*24+8,sy*24+8));
- for(let i=0;i<Math.min(MAX_GUARDS,Math.max(0,population));i++){const p=sites[(i*17+7)%sites.length];m.guards.push({...p,z:0,species:SPECIES[i%SPECIES.length],weapon:['pistol','rifle','knife','assault'][i%4]});}
+ for(let i=0;i<Math.min(MAX_GUARDS,Math.max(0,population));i++){const p=sites[(i*17+7)%sites.length];m.guards.push({...p,z:0,species:SPECIES[i%SPECIES.length],weapon:['pistol','rifle','knife','assault'][i%4],outfit:'red-hats'});}
  return m;
 }

@@ -36,7 +36,7 @@ export function createGame(seed=1947,definition=factoryMap(),detect=true,difficu
  const cast=[['Yakov','horse','assault'],['Anya','goat','rifle'],['Misha','donkey','pistol'],['Vera','sheep','knife']];
  definition.starts.forEach((p,i)=>add('squad',cast[i][0],cast[i][1],p.x,p.y,cast[i][2],levelOf(p)));
  const names=['Boris','Lev','Grigori','Oleg','Pavel','Igor','Anton','Vadim','Yuri','Sasha','Pyotr','Nikolai'];
- definition.guards.forEach((g,i)=>add('guard',names[i]||`Guard ${i+1}`,g.species,g.x,g.y,g.weapon,levelOf(g)));
+ definition.guards.forEach((g,i)=>{add('guard',names[i]||`Guard ${i+1}`,g.species,g.x,g.y,g.weapon,levelOf(g));if(g.outfit)s.units.at(-1).outfit=g.outfit;});
  for(const u of s.units){initInventory(u,WEAPONS);if(u.team==='squad')initProgression(u);}s.loot=definition.starts.map((p,i)=>({...p,items:[{type:'ammo',kind:i%2?'rifle':'pistol',count:i%2?5:8}]}));
  if(detect)refresh(s);log(s,`Local map ready / ${definition.guards.length} guards.`);return s;
 }

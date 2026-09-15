@@ -14,3 +14,5 @@
 aside details{border:1px solid #65705a;padding:10px;margin:12px 0}aside summary{cursor:pointer;color:#e5ce91}#sheet button{display:block;width:100%;margin-top:5px}
 
 .backpack-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(4,58px);gap:3px}.backpack-grid button{min-width:0;padding:3px;font-size:10px;overflow:hidden}.bag-cell{background:#182921}.bag-item{z-index:1;background:#55553a}.bag-item[aria-pressed="true"]{outline:2px solid #f4d071}.ready-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.ready-slot{border:1px solid #b7a96f;padding:4px}.ready-slot button{width:100%;font-size:11px}
+
+#economy-summary{color:#f2ce79;font-weight:700}.bag-item img{width:30px;height:25px;object-fit:contain;vertical-align:middle;margin-right:4px}

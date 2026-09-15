@@ -6,6 +6,16 @@ export const PROPS={
  'barrel-single':{w:1,h:1,cover:25,solid:true},'barrels-cluster':{w:1,h:1,cover:25,solid:true},sandbags:{w:1,h:1,cover:25,solid:true},pallet:{w:1,h:1,cover:0,solid:false}
 };
 export const EDGES={'fence-cut':{solid:false,opaque:false,cover:0},wall:{solid:true,opaque:true,cover:25,art:'wall-concrete'},door:{solid:false,opaque:false,cover:0},'wall-concrete':{solid:true,opaque:true,cover:25,art:'wall-concrete'},'wall-corrugated':{solid:true,opaque:true,cover:25,art:'wall-corrugated'},'wall-brick':{solid:true,opaque:true,cover:25,art:'wall-brick'},'fence-chainlink':{solid:true,opaque:false,cover:0,art:'fence-chainlink'},'fence-railing':{solid:true,opaque:false,cover:0,art:'fence-railing'}};
+// Explicit occupancy and combat rules shared by editor, validation and game.
+for(const kind of ['lab-bench','medical-exam-table','medical-surgical-table'])PROPS[kind]={w:2,h:1,cover:25,solid:true};
+for(const kind of ['hospital-bed','wheeled-stretcher','scrub-sink'])PROPS[kind]={w:1,h:2,cover:25,solid:true};
+for(const kind of ['lab-control-console','bedside-monitor','instrument-trolley'])PROPS[kind]={w:1,h:1,cover:25,solid:true};
+for(const kind of ['botanical-chamber','medicine-cabinet'])PROPS[kind]={w:1,h:1,cover:25,solid:true,tall:true};
+PROPS['iv-stand']={w:1,h:1,cover:0,solid:true,visualHeight:60};
+for(const kind of ['wooden-crate','supply-chest','medicine-cabinet','toolbox'])for(const state of ['closed','open'])PROPS[kind+'-'+state]={w:1,h:1,cover:kind==='toolbox'?0:25,solid:true,tall:kind==='medicine-cabinet'};
+for(const kind of ['first-aid-kit','wire-cutters','spare-parts','gun-pistol','gun-rifle','gun-assault','ammo-pistol','ammo-rifle','ammo-assault'])PROPS[kind]={w:1,h:1,cover:0,solid:false,visualHeight:12};
+EDGES['fence-cut'].art='fence-cut';
+for(const kind of ['jail-bars','jail-door-closed'])EDGES[kind]={solid:true,opaque:false,cover:0,art:kind};
 Object.assign(EDGES,{
  'window-concrete':{solid:true,opaque:true,window:true,cover:25,art:'window-concrete'},'window-brick':{solid:true,opaque:true,window:true,cover:25,art:'window-brick'},'window-corrugated':{solid:true,opaque:true,window:true,cover:25,art:'window-corrugated'},
  'door-steel-closed':{solid:true,opaque:true,cover:25,art:'door-steel-closed'},'door-wood-closed':{solid:true,opaque:true,cover:25,art:'door-wood-closed'},'doorway-concrete-open':{solid:false,opaque:false,cover:0,art:'doorway-concrete-open'}
