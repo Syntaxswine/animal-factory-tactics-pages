@@ -1,7 +1,7 @@
 import {factoryMap,generateMap,blockedEdge,tileKey,levelOf,neighbors} from './maps.js';
 import {createGame,squad,guards,alive,refresh,walkable,log} from './engine.js';
-export function createWorld(custom=null) {
-  return {current:'factory',definitions:{factory:custom||factoryMap(),yard:generateMap(83,'Yard test'),annex:generateMap(126,'Workshop test')},states:{factory:createGame(1947,custom||factoryMap())},links:[['factory','yard'],['yard','annex']]};
+export function createWorld(custom=null,difficulty='standard') {
+  return {difficulty,current:'factory',definitions:{factory:custom||factoryMap(),yard:generateMap(83,'Yard test'),annex:generateMap(126,'Workshop test')},states:{factory:createGame(1947,custom||factoryMap(),true,difficulty)},links:[['factory','yard'],['yard','annex']]};
 }
 export const currentMap=world=>world.states[world.current];
 export function travelReason(world,destination) {
@@ -24,7 +24,7 @@ function landing(s,start,occupied) {
 }
 export function travel(world,destination) {
   const error=travelReason(world,destination);if(error)return {ok:false,error};
-  const previous=currentMap(world),next=world.states[destination]||createGame(1947,world.definitions[destination],false);
+  const previous=currentMap(world),next=world.states[destination]||createGame(1947,world.definitions[destination],false,world.difficulty);
   const incoming=structuredClone(previous.units.filter(u=>u.team==='squad'));
   const occupied=new Set(guards(next).map(u=>tileKey(u.x,u.y,levelOf(u))));
   for(const u of incoming){const p=landing(next,next.definition.starts[u.id],occupied);if(!p)return {ok:false,error:'No free arrival tile.'};u.x=p.x;u.y=p.y;u.z=levelOf(p);u.alert=false;u.lastKnown=null;if(alive(u))occupied.add(tileKey(p.x,p.y,levelOf(p)));}

@@ -10,3 +10,5 @@
 #utility-actions{display:grid;gap:5px;font-size:12px;color:#c4c9b0}#utility-actions button{text-align:left;padding:7px}#medical-info{font-size:12px;color:#dfc995}
 
 #group-status{font:12px monospace;color:#d5c890}#aim-zone{max-width:100%;background:#263a2c;color:#ecdfbc;padding:6px}#select-all{font-size:12px}
+
+aside details{border:1px solid #65705a;padding:10px;margin:12px 0}aside summary{cursor:pointer;color:#e5ce91}#sheet button{display:block;width:100%;margin-top:5px}
