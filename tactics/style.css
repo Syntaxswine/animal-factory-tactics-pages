@@ -4,3 +4,5 @@
 .view-tools,.map-tools{flex-wrap:wrap;max-width:calc(100% - 32px)} .view-tools label,.map-tools label{display:inline-flex;align-items:center;gap:4px;color:#e2d5b0;font:11px monospace} .view-tools input,.map-tools input{width:42px} .view-tools select,.map-tools select,.map-tools input{color:#eadcb6;background:#28382e;border:1px solid #647156;padding:5px} .view-tools input{padding:5px} #mini{cursor:crosshair}
 
 #selected img[src*='/armed/'],.squad-card img[src*='/armed/']{width:auto;flex-shrink:0}
+
+.layer-legend{font:11px monospace;color:#dfd6b9;align-self:center;padding:4px 6px;background:#182820cc}

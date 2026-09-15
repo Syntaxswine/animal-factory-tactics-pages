@@ -1,4 +1,6 @@
+import {layerCompositor,layerStyle} from './layers.js';
 import {characterArt,ARMED_WEAPONS} from './character-art.js';
+import {LOOT_WEAPONS,fallenVisible,drawDeathDrops} from './loot-art.js';
 import {PROPS,propCells} from './environment.js';
 import {environmentRenderer} from './environment-renderer.js';
 import {bounds,inView,focusSector,sectorOverview} from './view.js';
@@ -6,9 +8,10 @@ import {createWorld,currentMap,travel,travelReason} from './world.js';
 import {parseMap,levelOf,roofTop,neighbors} from './maps.js';
 import {edgeCells,edgePoints} from './maps.js';
 import {W,H,WEAPONS,key,alive,squad,guards,occupant,tile,walkable,createGame,STANCES,stanceOf,setStance,movementNeighbors,navigationPath,pathCost,pathTo,move,stepMovement,previewAttack,attack,equip,reload,endTurn,stepEnemy,canControl} from './engine.js';
-const $=id=>document.getElementById(id),canvas=$('map'),ctx=canvas.getContext('2d'),mini=$('mini').getContext('2d');
+const $=id=>document.getElementById(id),canvas=$('map'),mainCtx=canvas.getContext('2d'),mini=$('mini').getContext('2d');
 let customMap=null,loadError='';
 if(new URLSearchParams(location.search).get('map')==='custom'){try{customMap=parseMap(sessionStorage.getItem('red-shift-playtest')||'');}catch(e){loadError='Could not load the playtest map. '+e.message;}}
+let ctx=mainCtx,renderLevel=0;const compositeLayers=layerCompositor();
 let viewLevel=0,routeCache=null;
 let world=createWorld(customMap),s=currentMap(world),targetId=null,burst=false,showGrid=false,hover=null,hoverActor=null,route=null,lastTick=0,lastRevision=-1,toast='',toastUntil=0,effectUntil=0,lastEffect=null,drag=null,width=1,height=1;
 const camera={x:0,y:0,zoom:1.15},images=new Map(),sprites=[];
@@ -18,6 +21,7 @@ function load(src){if(images.has(src))return images.get(src);const img=new Image
 for(const species of new Set(s.units.map(u=>u.species)))for(const pose of ['idle','walk-a','walk-b'])load(`../assets/characters/${species}-${pose}.png`);
 for(const species of new Set(s.units.map(u=>u.species)))for(const weapon of ARMED_WEAPONS)load(characterArt(species,weapon).src);
 for(const name of ['mill','bakery','bottler','dairy'])load(`../assets/machines/industrial/${name}.png`);
+for(const weapon of LOOT_WEAPONS)for(const kind of ['gun','ammo'])load(`../assets/environment/loot/${kind}-${weapon}.png`);
 function project(x,y,z=0){return {x:camera.x+(x-y)*28*camera.zoom,y:camera.y+(x+y)*14*camera.zoom-z*camera.zoom};}
 function pick(x,y){const px=(x-camera.x)/(28*camera.zoom),py=(y-camera.y)/(14*camera.zoom);return {x:Math.round((px+py)/2),y:Math.round((py-px)/2)};}
 function center(){const p=selected();viewLevel=levelOf(p);$('level').value=viewLevel;camera.x=width*.46-(p.x-p.y)*28*camera.zoom;camera.y=height*.48-(p.x+p.y)*14*camera.zoom;}
@@ -30,8 +34,8 @@ function block(x,y,h,top,left,right){const p=project(x,y),a=28*camera.zoom,b=14*
 function textLabel(label,x,y,color='#ddcf9f',size=11){const p=project(x,y);ctx.font=`${size*camera.zoom}px monospace`;ctx.textAlign='center';ctx.fillStyle=color;ctx.fillText(label,p.x,p.y);}
 function drawTerrain(){
  // Existing industrial sprites form the factory skyline, outside the walkable map.
- if(viewLevel===0)for(const [name,x,y,size]of [['mill',7,-3,225],['bakery',17,-3,245],['bottler',25,-2,220],['dairy',34,14,200]]){const p=project(x,y),img=load(`../assets/machines/industrial/${name}.png`);if(img.complete&&img.naturalWidth){ctx.globalAlpha=.58;ctx.drawImage(img,p.x-size*camera.zoom/2,p.y-size*camera.zoom,size*camera.zoom,size*camera.zoom);ctx.globalAlpha=1;}}
- const b=bounds(camera,width,height);for(let y=b.y0;y<=b.y1;y++)for(let x=b.x0;x<=b.x1;x++){const k=key(x,y,viewLevel),seen=s.seen.has(k),visible=s.visible.has(k),t=tile(s,x,y,viewLevel),n=(x*37+y*13)%9;if(seen&&t==='void')continue;
+ if(renderLevel===0)for(const [name,x,y,size]of [['mill',7,-3,225],['bakery',17,-3,245],['bottler',25,-2,220],['dairy',34,14,200]]){const p=project(x,y),img=load(`../assets/machines/industrial/${name}.png`);if(img.complete&&img.naturalWidth){ctx.globalAlpha=.58;ctx.drawImage(img,p.x-size*camera.zoom/2,p.y-size*camera.zoom,size*camera.zoom,size*camera.zoom);ctx.globalAlpha=1;}}
+ const b=bounds(camera,width,height);for(let y=b.y0;y<=b.y1;y++)for(let x=b.x0;x<=b.x1;x++){const k=key(x,y,renderLevel),seen=s.seen.has(k),visible=s.visible.has(k),t=tile(s,x,y,renderLevel),n=(x*37+y*13)%9;if(seen&&t==='void'||!seen&&(renderLevel!==viewLevel||renderLevel>0))continue;
   const base=t==='floor'?['#77745a','#7b765b','#736f56'][n%3]:['#6f7053','#737256','#696d51'][n%3];
   diamond(x,y,seen?base:'#303c34',showGrid&&seen?(x%24===0||y%24===0?'#e3cf8f99':'#a3a17b45'):seen?'#555e4533':'#37433644');
   if(seen){if(t==='water')diamond(x,y,'#365f72');else art.ground(ctx,project,camera.zoom,x,y,t);if(t==='bridge')textLabel('═',x,y,'#ccb88c',12);if(showGrid)diamond(x,y,null,x%24===0||y%24===0?'#e3cf8f99':'#a3a17b45');if(n===0||n===4){const p=project(x,y);ctx.strokeStyle='#3c473541';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(p.x-12*camera.zoom,p.y-4*camera.zoom);ctx.lineTo(p.x-5*camera.zoom,p.y);ctx.lineTo(p.x+5*camera.zoom,p.y-2*camera.zoom);ctx.stroke();}
@@ -39,9 +43,9 @@ function drawTerrain(){
    if(!visible)diamond(x,y,'#182c2899');
   }
  }
- for(const link of s.climbs||[])for(const p of [link,roofTop(link)])if(p.z===viewLevel&&s.seen.has(key(p.x,p.y,p.z))){diamond(p.x,p.y,'#dcb86777','#ffe4a2');textLabel(p.z===link.z?'R ↑':'R ↓',p.x,p.y,'#ffe4a2',16);}
- for(const p of s.stairs)if((p.z===viewLevel||p.z+1===viewLevel)&&s.seen.has(key(p.x,p.y,viewLevel))){diamond(p.x,p.y,'#66bccb77','#a6f3ed');textLabel((p.kind==='ladder'?'L ':'')+(p.z===viewLevel?'↑':'↓'),p.x,p.y,'#effffe',16);}
- for(const exit of s.definition.exits.filter(p=>levelOf(p)===viewLevel)){if(s.seen.has(key(exit.x,exit.y,levelOf(exit)))){diamond(exit.x,exit.y,'#72bcd555','#a9e5eb');textLabel('TRAVEL',exit.x,exit.y,'#d8f6f4',8);}}
+ for(const link of s.climbs||[])for(const p of [link,roofTop(link)])if(p.z===renderLevel&&s.seen.has(key(p.x,p.y,p.z))){diamond(p.x,p.y,'#dcb86777','#ffe4a2');textLabel(p.z===link.z?'R ↑':'R ↓',p.x,p.y,'#ffe4a2',16);}
+ for(const p of s.stairs)if((p.z===renderLevel||p.z+1===renderLevel)&&s.seen.has(key(p.x,p.y,renderLevel))){diamond(p.x,p.y,'#66bccb77','#a6f3ed');textLabel((p.kind==='ladder'?'L ':'')+(p.z===renderLevel?'↑':'↓'),p.x,p.y,'#effffe',16);}
+ for(const exit of s.definition.exits.filter(p=>levelOf(p)===renderLevel)){if(s.seen.has(key(exit.x,exit.y,levelOf(exit)))){diamond(exit.x,exit.y,'#72bcd555','#a9e5eb');textLabel('TRAVEL',exit.x,exit.y,'#d8f6f4',8);}}
 
 }
 function drawEdge(k,kind){if(art.edge(ctx,project,camera.zoom,k,kind))return;
@@ -52,18 +56,18 @@ function drawEdge(k,kind){if(art.edge(ctx,project,camera.zoom,k,kind))return;
  ctx.strokeStyle='#544d3c88';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(a.x,a.y-h/2);ctx.lineTo(b.x,b.y-h/2);ctx.stroke();
 }
 function drawObjects(now){
- sprites.length=0;
- const b=bounds(camera,width,height),objects=[];for(const [k,kind]of Object.entries(s.edges)){const cells=edgeCells(k);if(levelOf(cells[0])===viewLevel&&cells.some(p=>inView(p,b))&&cells.some(p=>s.seen.has(key(p.x,p.y,viewLevel))))objects.push({x:(cells[0].x+cells[1].x)/2,y:(cells[0].y+cells[1].y)/2,type:'edge',edge:k,kind,visible:cells.some(p=>s.visible.has(key(p.x,p.y,viewLevel)))});}for(let y=b.y0;y<=b.y1;y++)for(let x=b.x0;x<=b.x1;x++)if(s.seen.has(key(x,y,viewLevel))&&['wall','crate'].includes(tile(s,x,y,viewLevel)))objects.push({x,y,type:tile(s,x,y,viewLevel)});
- for(const p of s.props)if(levelOf(p)===viewLevel&&propCells(p).some(q=>inView(q,b)&&s.seen.has(key(q.x,q.y,q.z))))objects.push({...p,type:'prop',depth:Math.max(...propCells(p).map(q=>q.x+q.y))});
- for(const u of s.units)if(levelOf(u)===viewLevel&&inView(u,b)&&(u.team==='squad'||s.detected.has(u.id)))objects.push({...u,type:'actor',unit:u});
+
+ const b=bounds(camera,width,height),objects=[];for(const [k,kind]of Object.entries(s.edges)){const cells=edgeCells(k);if(levelOf(cells[0])===renderLevel&&cells.some(p=>inView(p,b))&&cells.some(p=>s.seen.has(key(p.x,p.y,renderLevel))))objects.push({x:(cells[0].x+cells[1].x)/2,y:(cells[0].y+cells[1].y)/2,type:'edge',edge:k,kind,visible:cells.some(p=>s.visible.has(key(p.x,p.y,renderLevel)))});}for(let y=b.y0;y<=b.y1;y++)for(let x=b.x0;x<=b.x1;x++)if(s.seen.has(key(x,y,renderLevel))&&['wall','crate'].includes(tile(s,x,y,renderLevel)))objects.push({x,y,type:tile(s,x,y,renderLevel)});
+ for(const p of s.props)if(levelOf(p)===renderLevel&&propCells(p).some(q=>inView(q,b)&&s.seen.has(key(q.x,q.y,q.z))))objects.push({...p,type:'prop',depth:Math.max(...propCells(p).map(q=>q.x+q.y))});
+ for(const u of s.units)if(levelOf(u)===renderLevel&&inView(u,b)&&(u.team==='squad'||s.detected.has(u.id)||fallenVisible(s,u,renderLevel)))objects.push({...u,type:'actor',unit:u});
  objects.sort((a,b)=>(a.depth??a.x+a.y)-(b.depth??b.x+b.y)||(a.type==='actor'?1:-1));
- for(const obj of objects){const {x,y,type}=obj,visible=obj.visible??s.visible.has(key(x,y,viewLevel));ctx.globalAlpha=visible?1:.45;
+ for(const obj of objects){const {x,y,type}=obj,visible=obj.visible??s.visible.has(key(x,y,renderLevel));ctx.globalAlpha=visible?1:.45;
   if(type==='prop'){art.prop(ctx,project,camera.zoom,obj);}
   else if(type==='edge'){drawEdge(obj.edge,obj.kind);}
   else if(type==='wall'){block(x,y,23,'#9b8e6b','#625d49','#797158');const p=project(x,y,10);ctx.strokeStyle='#403f3477';ctx.beginPath();ctx.moveTo(p.x,p.y+14*camera.zoom);ctx.lineTo(p.x+28*camera.zoom,p.y);ctx.stroke();}
   else if(type==='crate'){if(art.prop(ctx,project,camera.zoom,{...obj,kind:'crate-wood'})){ctx.globalAlpha=1;continue;}block(x,y,14,'#ac8651','#695539','#866b42');const p=project(x,y,14);ctx.strokeStyle='#463d2bb0';ctx.beginPath();ctx.moveTo(p.x-15*camera.zoom,p.y-6*camera.zoom);ctx.lineTo(p.x+13*camera.zoom,p.y+7*camera.zoom);ctx.stroke();}
   else{const u=obj.unit,p=project(x,y),color=u.team==='guard'?'#e57862':u.id===s.selected?'#f2ce79':'#b6d5b0';
-   if(!alive(u)){ctx.globalAlpha=.4;diamond(x,y,'#562e2566');ctx.font=`${15*camera.zoom}px monospace`;ctx.textAlign='center';ctx.fillStyle='#b5a17c';ctx.fillText('×',p.x,p.y+4);continue;}
+   if(!alive(u)){diamond(x,y,'#562e2566');drawDeathDrops(ctx,load,u,p,camera.zoom);ctx.font=`${10*camera.zoom}px monospace`;ctx.textAlign='center';ctx.fillStyle='#b5a17c';ctx.fillText('×',p.x-17*camera.zoom,p.y+7*camera.zoom);ctx.globalAlpha=1;continue;}
    ctx.fillStyle='#13241d66';ctx.beginPath();ctx.ellipse(p.x,p.y+2*camera.zoom,15*camera.zoom,7*camera.zoom,0,0,Math.PI*2);ctx.fill();
    ctx.strokeStyle=color;ctx.lineWidth=u.id===s.selected?2.4:1.5;ctx.beginPath();ctx.ellipse(p.x,p.y,19*camera.zoom,9*camera.zoom,0,0,Math.PI*2);ctx.stroke();
    if(u.id===targetId)diamond(x,y,null,'#ffb28d',0,.9);
@@ -71,7 +75,7 @@ function drawObjects(now){
    ctx.save();ctx.translate(p.x,p.y+3*camera.zoom);ctx.scale(u.facing,1);if(img.complete&&img.naturalWidth)ctx.drawImage(img,-sw/2,-sh,sw,sh);else{ctx.fillStyle=color;ctx.fillRect(-sw/4,-sh,sw/2,sh);}ctx.restore();
    ctx.globalAlpha=1;ctx.fillStyle='#14221d';ctx.fillRect(p.x-17*camera.zoom,p.y-(frame.contentHeight/4+7)*camera.zoom,34*camera.zoom,4*camera.zoom);ctx.fillStyle=color;ctx.fillRect(p.x-17*camera.zoom,p.y-(frame.contentHeight/4+7)*camera.zoom,34*camera.zoom*u.hp/u.maxHp,3*camera.zoom);
    ctx.font=`bold ${9*camera.zoom}px monospace`;ctx.textAlign='center';ctx.fillStyle=color;ctx.fillText((u.team==='squad'?`${u.id+1} ${u.name}`:u.name)+(stanceOf(u)==='standing'?'':stanceOf(u)==='kneeling'?' [K]':' [P]'),p.x,p.y+17*camera.zoom);
-   sprites.push({id:u.id,x:p.x-sw/2,y:p.y-frame.contentHeight/4*camera.zoom,w:sw,h:(frame.contentHeight/4+10)*camera.zoom});
+   if(renderLevel===viewLevel)sprites.push({id:u.id,x:p.x-sw/2,y:p.y-frame.contentHeight/4*camera.zoom,w:sw,h:(frame.contentHeight/4+10)*camera.zoom});
   }ctx.globalAlpha=1;
  }
  ctx.globalAlpha=1;
@@ -82,8 +86,8 @@ function drawPreview(){
   else if(route){route.filter(p=>levelOf(p)===viewLevel).forEach(p=>diamond(p.x,p.y,pathCost(route)<=selected().ap||s.phase!=='player'?'#ddba6744':'#c9634933',null,0,.28));diamond(hover.x,hover.y,'#e0c78133','#d2bb78');}
  }
 }
-function drawMinimap(){mini.fillStyle='#192921';mini.fillRect(0,0,168,144);mini.strokeStyle='#647351';for(let i=0;i<=10;i++){mini.beginPath();mini.moveTo(i*16.8,0);mini.lineTo(i*16.8,144);mini.moveTo(0,i*14.4);mini.lineTo(168,i*14.4);mini.stroke();}for(const k of s.seen){const [x,y,z=0]=k.split(',').map(Number);if(z!==viewLevel)continue;mini.fillStyle='#718263';mini.fillRect(x/W*168,y/H*144,1,1);}for(const u of s.units)if(levelOf(u)===viewLevel&&alive(u)&&(u.team==='squad'||s.detected.has(u.id))){mini.fillStyle=u.team==='guard'?'#ff9275':u.id===s.selected?'#ffda79':'#c8e5b6';mini.fillRect(u.x/W*168-2,u.y/H*144-2,4,4);}}
-function draw(now){ctx.clearRect(0,0,width,height);ctx.fillStyle='#202c29';ctx.fillRect(0,0,width,height);if(camera.zoom<.2){sprites.length=0;sectorOverview(ctx,project,s,viewLevel,s.seen);for(const u of s.units)if(levelOf(u)===viewLevel&&alive(u)&&(u.team==='squad'||s.detected.has(u.id))){const p=project(u.x,u.y);ctx.fillStyle=u.team==='squad'?'#ffda79':'#ff9275';ctx.fillRect(p.x-2,p.y-2,4,4);}return;}drawTerrain();drawObjects(now);drawPreview();
+function drawMinimap(){mini.fillStyle='#192921';mini.fillRect(0,0,168,144);mini.strokeStyle='#647351';for(let i=0;i<=10;i++){mini.beginPath();mini.moveTo(i*16.8,0);mini.lineTo(i*16.8,144);mini.moveTo(0,i*14.4);mini.lineTo(168,i*14.4);mini.stroke();}for(let level=0;level<3;level++){const style=layerStyle(level,viewLevel);mini.save();mini.globalAlpha=style.alpha;mini.filter=style.filter;for(const k of s.seen){const [x,y,z=0]=k.split(',').map(Number);if(z!==level)continue;mini.fillStyle='#718263';mini.fillRect(x/W*168,y/H*144,1,1);}for(const u of s.units)if(levelOf(u)===level&&alive(u)&&(u.team==='squad'||s.detected.has(u.id))){mini.fillStyle=u.team==='guard'?'#ff9275':u.id===s.selected?'#ffda79':'#c8e5b6';mini.fillRect(u.x/W*168-2,u.y/H*144-2,4,4);}mini.restore();}}
+function draw(now){ctx.clearRect(0,0,width,height);ctx.fillStyle='#202c29';ctx.fillRect(0,0,width,height);if(camera.zoom<.2){sprites.length=0;compositeLayers(mainCtx,viewLevel,width,height,(ink,level)=>{sectorOverview(ink,project,s,level,s.seen,level===0);for(const u of s.units)if(levelOf(u)===level&&alive(u)&&(u.team==='squad'||s.detected.has(u.id))){const p=project(u.x,u.y);ink.fillStyle=u.team==='squad'?'#ffda79':'#ff9275';ink.fillRect(p.x-2,p.y-2,4,4);}});return;}sprites.length=0;compositeLayers(mainCtx,viewLevel,width,height,(ink,level)=>{ctx=ink;renderLevel=level;try{drawTerrain();drawObjects(now);}finally{ctx=mainCtx;renderLevel=viewLevel;}});ctx=mainCtx;renderLevel=viewLevel;drawPreview();
  if(s.effect!==lastEffect){lastEffect=s.effect;effectUntil=now+350;}if(s.effect&&now<effectUntil&&(s.effect.az===viewLevel||s.effect.bz===viewLevel)){const a=project(s.effect.ax,s.effect.ay,30),b=project(s.effect.bx,s.effect.by,30);ctx.strokeStyle=s.effect.hit?'#ffe6a2':'#c2c5a0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.beginPath();ctx.arc(b.x,b.y,7,0,7);ctx.stroke();}
 }
 function message(text){toast=text;toastUntil=performance.now()+3000;$('hint').textContent=text;}
