@@ -17,9 +17,10 @@ export function edgePoints(k){const [axis,xs,ys,zs]=k.split(':'),x=Number(xs),y=
 export function nearestEdge(fx,fy,z=0){const x=Math.round(fx),y=Math.round(fy),dx=fx-x,dy=fy-y;return Math.abs(dx)>=Math.abs(dy)?edgeKey('e',dx<0?x-1:x,y,z):edgeKey('s',x,dy<0?y-1:y,z);}
 export const stairKey=(x,y,z)=>`${x},${y},${z}`;
 export function stairSet(m){return new Map((m.stairs||[]).map(p=>[stairKey(p.x,p.y,p.z),p.kind==='ladder'?3:2]));}
-export function neighbors(m,p,stairs=stairSet(m)){
+export function neighbors(m,p,stairs=stairSet(m),includeDiagonals=true){
  const z=levelOf(p),out=[];
  for(const b of [{x:p.x+1,y:p.y,z},{x:p.x-1,y:p.y,z},{x:p.x,y:p.y+1,z},{x:p.x,y:p.y-1,z}])if(passable(m,b)&&!blockedEdge(m,p,b))out.push({...b,cost:1});
+ if(includeDiagonals)for(const dx of [-1,1])for(const dy of [-1,1]){const a={x:p.x+dx,y:p.y,z},b={x:p.x,y:p.y+dy,z},q={x:p.x+dx,y:p.y+dy,z};if(passable(m,a)&&passable(m,b)&&passable(m,q)&&!blockedEdge(m,p,a)&&!blockedEdge(m,p,b)&&!blockedEdge(m,a,q)&&!blockedEdge(m,b,q))out.push({...q,cost:1.5});}
  for(const dz of [-1,1])if(stairs.has(stairKey(p.x,p.y,Math.min(z,z+dz)))&&passable(m,{x:p.x,y:p.y,z:z+dz}))out.push({x:p.x,y:p.y,z:z+dz,cost:stairs.get(stairKey(p.x,p.y,Math.min(z,z+dz)))});for(const link of roofNeighbors(m,p))out.push(link);return out;
 }
 
@@ -57,7 +58,7 @@ const index=p=>levelOf(p)*W*H+p.y*W+p.x;
 function reachedTargets(m,targets){
  const visited=new Uint8Array(W*H*LEVELS),queue=new Int32Array(visited.length),stairs=stairSet(m),needed=new Set(targets.map(index));let head=0,tail=0;
  const start=index(m.starts[0]);queue[tail++]=start;visited[start]=1;needed.delete(start);
- while(head<tail&&needed.size){const id=queue[head++],z=Math.floor(id/(W*H)),n=id%(W*H),p={x:n%W,y:Math.floor(n/W),z};for(const next of neighbors(m,p,stairs)){const v=index(next);if(!visited[v]){visited[v]=1;queue[tail++]=v;needed.delete(v);}}}return needed;
+ while(head<tail&&needed.size){const id=queue[head++],z=Math.floor(id/(W*H)),n=id%(W*H),p={x:n%W,y:Math.floor(n/W),z};for(const next of neighbors(m,p,stairs,false)){const v=index(next);if(!visited[v]){visited[v]=1;queue[tail++]=v;needed.delete(v);}}}return needed;
 }
 export function validateMap(raw,{connectivity=true}={}){
  const errors=[],point=p=>p&&inBounds(p.x,p.y,levelOf(p));

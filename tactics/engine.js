@@ -10,7 +10,7 @@ export const WEAPONS={
 };
 export const STANCES={standing:{label:'Standing',moveCost:2},kneeling:{label:'Kneeling',moveCost:4},prone:{label:'Prone',moveCost:8}};
 export const stanceOf=u=>Object.hasOwn(STANCES,u?.stance)?u.stance:'standing';
-export function movementNeighbors(s,u,p=u,stairs){return neighbors(s,p,stairs).filter(q=>levelOf(q)===levelOf(p)||stanceOf(u)==='standing').map(q=>({...q,cost:levelOf(q)===levelOf(p)?STANCES[stanceOf(u)].moveCost:q.cost}));}
+export function movementNeighbors(s,u,p=u,stairs){return neighbors(s,p,stairs).filter(q=>(levelOf(q)===levelOf(p)||stanceOf(u)==='standing')&&!(levelOf(q)===levelOf(p)&&q.x!==p.x&&q.y!==p.y&&[occupant(s,q.x,p.y,levelOf(p)),occupant(s,p.x,q.y,levelOf(p))].some(v=>v&&v!==u))).map(q=>({...q,cost:levelOf(q)===levelOf(p)?STANCES[stanceOf(u)].moveCost*q.cost:q.cost}));}
 export const key=tileKey;
 export const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,(levelOf(a)-levelOf(b))*3);
 export const alive=u=>u.hp>0;
@@ -50,7 +50,7 @@ export const pathCost=path=>path.reduce((n,p)=>n+(p.cost||1),0);
 export function pathTo(s,u,x,y,z=levelOf(u)){
  if(!walkable(s,x,y,z)||(occupant(s,x,y,z)&&occupant(s,x,y,z)!==u))return null;
  const start=key(u.x,u.y,levelOf(u)),goal=key(x,y,z),occupied=new Set(s.units.filter(p=>alive(p)&&p!==u).map(p=>key(p.x,p.y,levelOf(p)))),stairs=stairSet(s);
- const heuristic=p=>(Math.abs(p.x-x)+Math.abs(p.y-y))*STANCES[stanceOf(u)].moveCost+2*Math.abs(levelOf(p)-z),heap=[],scores=new Map([[start,0]]),parents=new Map();
+ const heuristic=p=>{const dx=Math.abs(p.x-x),dy=Math.abs(p.y-y);return (Math.max(dx,dy)+.5*Math.min(dx,dy))*STANCES[stanceOf(u)].moveCost+2*Math.abs(levelOf(p)-z);},heap=[],scores=new Map([[start,0]]),parents=new Map();
  const less=(a,b)=>a.f<b.f||(a.f===b.f&&a.g>b.g);
  const push=n=>{heap.push(n);let i=heap.length-1;while(i){const p=(i-1)>>1;if(!less(heap[i],heap[p]))break;[heap[i],heap[p]]=[heap[p],heap[i]];i=p;}};
  const pop=()=>{const first=heap[0],last=heap.pop();if(heap.length){heap[0]=last;let i=0;while(true){let c=i*2+1;if(c>=heap.length)break;if(c+1<heap.length&&less(heap[c+1],heap[c]))c++;if(!less(heap[c],heap[i]))break;[heap[i],heap[c]]=[heap[c],heap[i]];i=c;}}return first;};
@@ -131,7 +131,7 @@ export function stepEnemy(s){
  if(target&&previewAttack(s,g,target).ok){attack(s,g,target,false,true);return true;}
  if(target&&previewAttack(s,g,target).reason==='Not enough AP'){g.ap=0;s.enemyIndex++;return true;}
  if(WEAPONS[g.weapon].mag&&g.ammo[g.weapon]===0&&reload(s,g,true))return true;
- const dest=g.lastKnown;if(dest){let best=null;for(const q of neighbors(s,dest)){const path=pathTo(s,g,q.x,q.y,q.z);if(path?.length&&(!best||pathCost(path)<pathCost(best)))best=path;}
+ const dest=g.lastKnown;if(dest){let best=null;for(const q of neighbors(s,dest)){if(!WEAPONS[g.weapon].mag&&distance(q,dest)>WEAPONS[g.weapon].range)continue;const path=pathTo(s,g,q.x,q.y,q.z);if(path?.length&&(!best||pathCost(path)<pathCost(best)))best=path;}
   if(best&&best[0].cost<=g.ap){const p=best[0];g.facing=(p.x-g.x)-(p.y-g.y)>=0?1:-1;g.x=p.x;g.y=p.y;g.z=levelOf(p);g.steps++;g.ap-=p.cost;refresh(s);return true;}}
  g.ap=0;s.enemyIndex++;return true;
 }
