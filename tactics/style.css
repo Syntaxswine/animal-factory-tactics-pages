@@ -13,10 +13,20 @@
 
 aside details{border:1px solid #65705a;padding:10px;margin:12px 0}aside summary{cursor:pointer;color:#e5ce91}#sheet button{display:block;width:100%;margin-top:5px}
 
-.backpack-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(4,58px);gap:3px}.backpack-grid button{min-width:0;padding:3px;font-size:10px;overflow:hidden}.bag-cell{background:#182921}.bag-item{z-index:1;background:#55553a}.bag-item[aria-pressed="true"]{outline:2px solid #f4d071}.ready-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.ready-slot{border:1px solid #b7a96f;padding:4px}.ready-slot button{width:100%;font-size:11px}
+.backpack-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:repeat(3,90px);gap:3px}.backpack-grid button{min-width:0;padding:3px;font-size:10px;overflow:hidden}.bag-cell{background:#182921}.bag-item{z-index:1;background:#55553a}.bag-item[aria-pressed="true"]{outline:2px solid #f4d071}.ready-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.ready-slot{border:1px solid #b7a96f;padding:4px}.ready-slot button{width:100%;font-size:11px}
 
 #economy-summary{color:#f2ce79;font-weight:700}.bag-item img{width:30px;height:25px;object-fit:contain;vertical-align:middle;margin-right:4px}
 
 #campaign-clock{font:13px monospace;color:#f2ce79;white-space:nowrap}.downtime{border-top:1px solid #56604b;margin-top:20px;padding-top:8px}.downtime-actions{display:flex;gap:8px;margin-top:12px}#downtime-roster{white-space:pre-line}#downtime-result{color:#f2ce79}
 
 .inventory-stats{padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid #65705a}.inventory-stats h3{margin:12px 0;color:#f2ce79;font-size:16px}.inventory-stats dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin:12px 0}.inventory-stats dt{font-size:11px;color:#b7bba7}.inventory-stats dd{margin:3px 0 0;font-size:13px;color:#eee9db;font-variant-numeric:tabular-nums}.inventory-stats p{font-size:11px;line-height:1.5}
+
+#inventory-open{width:100%;margin:12px 0;border-color:var(--gold)}
+#inventory-screen{width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;padding:28px clamp(16px,4vw,64px);border:0;background:#202923;overflow:auto}
+.inventory-heading{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid #65705a;padding-bottom:14px}.inventory-heading h2{margin:6px 0;font-size:34px}
+#merc-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}#merc-tabs button{min-width:120px;padding:12px 20px}#merc-tabs [aria-selected=true]{background:#605538;border-color:var(--gold)}
+#merc-panel{display:grid;grid-template-columns:minmax(240px,1fr) minmax(0,2fr);gap:32px;max-width:1300px;margin:auto}
+#inventory-character{background:#29342c;padding:20px;border:1px solid #465545}.inventory-portrait{display:block;width:100%;height:230px;object-fit:contain;background:radial-gradient(ellipse,#536048,transparent 70%)}
+.inventory-equipment{min-width:0}.inventory-equipment h3{font-size:22px;margin:0 0 18px}.inventory-stats{border:0;margin:0;padding:0}.inventory-stats h3{font-size:22px}.inventory-stats dd{font-size:15px}
+#inventory .ready-slot{padding:10px}#inventory .ready-slot button{font-size:13px}#inventory .backpack-grid{gap:6px;margin:20px 0}#inventory .bag-item{font-size:12px}#inventory .bag-item img{display:block;width:100%;height:42px;margin:0 auto 4px}#inventory>button{margin:4px}
+@media(max-width:760px){#merc-panel{grid-template-columns:1fr;gap:20px}#inventory-character{display:grid;grid-template-columns:100px 1fr;gap:16px;padding:12px}.inventory-portrait{height:180px}.inventory-stats h3{font-size:18px}#inventory .backpack-grid{grid-template-rows:repeat(3,76px);gap:3px}#inventory .bag-item{font-size:10px}#merc-tabs button{min-width:0;flex:1;padding:10px}.inventory-heading h2{font-size:26px}}
