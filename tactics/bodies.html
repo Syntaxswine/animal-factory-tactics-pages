@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Body sprites · Animal Factory Tactics</title>
+<style>
+body{margin:24px;background:#1c2923;color:#eee5cd;font:16px system-ui}a{color:#efd08b}h1{font-size:26px}label{display:inline-block;margin:0 20px 16px 0}select{font:inherit}
+#gallery{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}figure{margin:0;background:#35463a;border:1px solid #586553;border-radius:8px;overflow:hidden}figcaption{padding:12px}.stage{height:150px;display:flex;justify-content:center;align-items:center;background:repeating-conic-gradient(#35463a 0% 25%,#3d4e41 0% 50%) 0/24px 24px}.stage img{width:384px;height:256px;object-fit:contain;transform:translateY(-48px)}.mirror .stage img{transform:translateY(-48px) scaleX(-1)}.small .stage img{width:96px;height:64px;transform:none}.small.mirror .stage img{transform:scaleX(-1)}
+</style>
+<h1>Body sprites</h1><p>Side-lying poses · No blood or visible wounds · Shared by incapacitated and dead units.</p>
+<p><a href="weapon-expansion.html">Weapon gallery</a> · <a href="index.html">Game</a></p>
+<label>Uniform <select id="outfit"><option value="all">All uniforms</option><option value="normal">Original</option><option value="red-hats">Red Hats</option></select></label>
+<label><input id="mirror" type="checkbox">Face left</label><label><input id="small" type="checkbox">Game scale</label>
+<p id="count"></p><div id="gallery"></div><script type="module" src="body-review.js"></script></html>

@@ -7,6 +7,7 @@ import {layerCompositor,layerStyle} from './layers.js';
 import {characterArt,ARMED_WEAPONS} from './character-art.js';
 import {LOOT_WEAPONS,fallenVisible,drawDeathDrops,inventoryArt,drawLootPile} from './loot-art.js';
 import {unitArt} from './red-hats-art.js';
+import {drawBody} from './body-art.js';
 import {PROPS,propCells} from './environment.js';
 import {environmentRenderer} from './environment-renderer.js';
 import {bounds,inView,focusSector,sectorOverview} from './view.js';
@@ -74,7 +75,7 @@ function drawObjects(now){for(const p of Object.values(s.glimpses||{}))if(levelO
  for(const p of s.props)if(levelOf(p)===renderLevel&&propCells(p).some(q=>inView(q,b)&&s.seen.has(key(q.x,q.y,q.z))))objects.push({...p,type:'prop',depth:Math.max(...propCells(p).map(q=>q.x+q.y))});
  for(const pile of s.loot||[])if(pile.items.length&&levelOf(pile)===renderLevel&&inView(pile,b)&&s.visible.has(key(pile.x,pile.y,renderLevel)))objects.push({...pile,type:'loot'});
  for(const u of s.units)if(u.casualty!=='captured'&&levelOf(u)===renderLevel&&inView(u,b)&&(u.team==='squad'||s.detected.has(u.id)||fallenVisible(s,u,renderLevel)))objects.push({...u,type:'actor',unit:u});
- objects.sort((a,b)=>(PROPS[a.kind]?.groundLayer?0:1)-(PROPS[b.kind]?.groundLayer?0:1)||(a.depth??a.x+a.y)-(b.depth??b.x+b.y)||(a.type==='actor'?1:-1));
+ objects.sort((a,b)=>(PROPS[a.kind]?.groundLayer?0:1)-(PROPS[b.kind]?.groundLayer?0:1)||(a.depth??a.x+a.y)-(b.depth??b.x+b.y)||(a.type==='actor'?(alive(a.unit)?2:0):1)-(b.type==='actor'?(alive(b.unit)?2:0):1));
  for(const obj of objects){const {x,y,type}=obj,visible=obj.visible??s.visible.has(key(x,y,renderLevel));ctx.globalAlpha=visible?1:.45;
   if(type==='prop'){art.prop(ctx,project,camera.zoom,obj);}
   else if(type==='loot'){if(!drawLootPile(ctx,load,obj,project(x,y),camera.zoom))diamond(x,y,'#d5b95870','#f2d78c',0,.35);}
@@ -82,7 +83,7 @@ function drawObjects(now){for(const p of Object.values(s.glimpses||{}))if(levelO
   else if(type==='wall'){block(x,y,23,'#9b8e6b','#625d49','#797158');const p=project(x,y,10);ctx.strokeStyle='#403f3477';ctx.beginPath();ctx.moveTo(p.x,p.y+14*camera.zoom);ctx.lineTo(p.x+28*camera.zoom,p.y);ctx.stroke();}
   else if(type==='crate'){if(art.prop(ctx,project,camera.zoom,{...obj,kind:'crate-wood'})){ctx.globalAlpha=1;continue;}block(x,y,14,'#ac8651','#695539','#866b42');const p=project(x,y,14);ctx.strokeStyle='#463d2bb0';ctx.beginPath();ctx.moveTo(p.x-15*camera.zoom,p.y-6*camera.zoom);ctx.lineTo(p.x+13*camera.zoom,p.y+7*camera.zoom);ctx.stroke();}
   else{const u=obj.unit,p=project(x,y),color=u.team==='guard'?'#e57862':selectedIds.has(u.id)?'#f2ce79':'#b6d5b0';
-   if(incapacitated(u)){diamond(x,y,'#bc8f3a77','#edc87a');textLabel(u.casualty==='stable'?'STABLE':u.name+' · '+u.bleedTurns+' turns',x,y,'#ffd98b',11);ctx.globalAlpha=1;continue;}if(!alive(u)){diamond(x,y,'#562e2566');drawDeathDrops(ctx,load,u,p,camera.zoom);ctx.font=`${10*camera.zoom}px monospace`;ctx.textAlign='center';ctx.fillStyle='#b5a17c';ctx.fillText('×',p.x-17*camera.zoom,p.y+7*camera.zoom);ctx.globalAlpha=1;continue;}
+   if(incapacitated(u)){drawBody(ctx,load,u,p,camera.zoom);diamond(x,y,'#bc8f3a77','#edc87a');textLabel(u.casualty==='stable'?'STABLE':u.name+' · '+u.bleedTurns+' turns',x,y,'#ffd98b',11);ctx.globalAlpha=1;continue;}if(!alive(u)){drawBody(ctx,load,u,p,camera.zoom);drawDeathDrops(ctx,load,u,p,camera.zoom);ctx.font=`${10*camera.zoom}px monospace`;ctx.textAlign='center';ctx.fillStyle='#b5a17c';ctx.fillText('×',p.x-17*camera.zoom,p.y+7*camera.zoom);ctx.globalAlpha=1;continue;}
    ctx.fillStyle='#13241d66';ctx.beginPath();ctx.ellipse(p.x,p.y+2*camera.zoom,15*camera.zoom,7*camera.zoom,0,0,Math.PI*2);ctx.fill();
    ctx.strokeStyle=color;ctx.lineWidth=u.id===s.selected?2.4:1.5;ctx.beginPath();ctx.ellipse(p.x,p.y,19*camera.zoom,9*camera.zoom,0,0,Math.PI*2);ctx.stroke();
    if(u.id===targetId)diamond(x,y,null,'#ffb28d',0,.9);
