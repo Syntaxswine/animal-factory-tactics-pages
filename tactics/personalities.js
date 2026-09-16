@@ -1,0 +1,25 @@
+// Authored people, independent of species bonuses. Social rolls never consume ballistic RNG.
+export const PERSONALITIES={
+ Yakov:{background:'A former shift foreman who still counts heads before leaving a room.',motivation:'Bring everyone home. Earn authority by taking responsibility.',temperament:'Protective, disciplined, dry; repeated carelessness breaks his patience.',aggression:35,pride:40,discipline:85,forgiveness:60,loyalty:90,humor:65,bonds:{Misha:30,Anya:5,Vera:25},quip:['Check your lane. I am still using this body.','We discussed which side of me the enemy stands on.'],repeat:['Same mistake twice. Start paying attention.'],retaliate:['You want my attention? You have it.'],thanks:'Good hands. I owe you another shift.'},
+ Anya:{background:'A courier who carried strike messages through checkpoints and learned never to look frightened.',motivation:'Keep her freedom, and never let anyone mistake trust for obedience.',temperament:'Quick, proud, irreverent; warm with friends and touchy about disrespect.',aggression:80,pride:90,discipline:35,forgiveness:25,loyalty:55,humor:85,bonds:{Yakov:5,Misha:-10,Vera:40},quip:['Lovely. Shall I wear a target next time?','Wrong uniform, genius.'],repeat:['Again? Tell me that was an accident.'],retaliate:['Try that again. Actually, let me.'],thanks:'Stay close, all right? Just this once.'},
+ Misha:{background:'A maintenance fitter who remembers every broken promise as clearly as every missing tool.',motivation:'Build something that lasts, with people who do what they say.',temperament:'Methodical, deadpan, slow to anger; keeps a long account of injuries.',aggression:45,pride:65,discipline:75,forgiveness:20,loyalty:70,humor:40,bonds:{Yakov:35,Anya:-10,Vera:20},quip:['That repair is coming out of your share.','Noted. In permanent ink.'],repeat:['That is another entry in the ledger.'],retaliate:['Account settled.'],thanks:'I remember who fixes things, too.'},
+ Vera:{background:'An infirmary worker who used to hide injured strikers from the factory police.',motivation:'Protect people who cannot protect themselves, even when they make it difficult.',temperament:'Compassionate, stubborn, quietly fierce; forgiveness has limits.',aggression:25,pride:45,discipline:70,forgiveness:85,loyalty:95,humor:25,bonds:{Yakov:25,Anya:35,Misha:20},quip:['Breathe. Then aim. In that order.','I cannot bandage everyone and dodge you.'],repeat:['I forgave the first one. Do not ask again.'],retaliate:['Enough. You are endangering everyone.'],thanks:'Thank you. It is strange being on this side of the bandage.'}
+};
+const clamp=(v,min=0,max=100)=>Math.max(min,Math.min(max,v));
+export const personality=u=>PERSONALITIES[u.personalityId];
+export function initPersonality(u){if(!PERSONALITIES[u.name])return;u.personalityId=u.name;u.social={stress:0,bonds:{...personality(u).bonds},incidents:{},memories:[],voice:0};}
+function remember(u,text){u.social.memories.unshift(text);u.social.memories.length=Math.min(8,u.social.memories.length);}
+export function retaliationChance(u,attacker,damage){const p=personality(u),m=u.social;if(!p||!m)return 0;const incident=m.incidents[attacker.name];return clamp(p.aggression*.0035+p.pride*.0015-p.discipline*.003-p.forgiveness*.002-p.loyalty*.001+(damage/u.maxHp)*.5+m.stress*.003+(incident?.grudge||0)*.004+Math.min(4,Math.max(0,(incident?.hits||0)-1))*.07-(m.bonds[attacker.name]||0)*.003,0,.95);}
+export function friendlyReaction(s,u,attacker,damage,canShoot){
+ const p=personality(u),m=u.social;if(!p||!m)return null;
+ const incident=m.incidents[attacker.name]||={hits:0,damage:0,grudge:0};incident.hits++;incident.damage+=damage;incident.grudge=clamp(incident.grudge+8+(100-p.forgiveness)*.12);m.stress=clamp(m.stress+10+damage/u.maxHp*35);m.bonds[attacker.name]=clamp((m.bonds[attacker.name]||0)-8-damage/u.maxHp*20,-100,100);
+ remember(u,`${attacker.name} hit me for ${damage} damage (incident ${incident.hits}).`);
+ s.socialSeed=(Math.imul(s.socialSeed??(s.seed^0x9e3779b9),1664525)+1013904223)>>>0;
+ const retaliate=canShoot&&s.socialSeed/4294967296<retaliationChance(u,attacker,damage);
+ const lines=retaliate?p.retaliate:incident.hits>1?p.repeat:p.quip;
+ const line=lines[(m.voice+++(p.humor>=60?1:0))%lines.length];
+ return {speaker:u.name,line,retaliate};
+}
+export function helped(patient,medic){if(!patient.social)return null;patient.social.bonds[medic.name]=clamp((patient.social.bonds[medic.name]||0)+20,-100,100);patient.social.stress=clamp(patient.social.stress-20);remember(patient,`${medic.name} stopped my bleeding.`);return personality(patient)?.thanks;}
+export function settleStress(u,amount){if(u.social)u.social.stress=clamp(u.social.stress-amount);}
+export function personalityDescription(u){const p=personality(u);if(!p||!u.social)return [];return [p.background,p.motivation,p.temperament,`Stress: ${Math.round(u.social.stress)}/100.`,...Object.entries(u.social.bonds).map(([name,bond])=>`${name}: ${bond>=25?'trusted':bond>=0?'cautious trust':bond>-35?'strained':'resented'} (${Math.round(bond)}).`),...u.social.memories];}

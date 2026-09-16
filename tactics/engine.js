@@ -1,3 +1,4 @@
+import {initPersonality,friendlyReaction,helped,settleStress} from './personalities.js';
 import {initProgression,awardCombatXP,train} from './progression.js';
 import {bulletTrajectory} from './projectiles.js';
 import {gridLayout,storeLayout,placeItem,initInventory,reserve,consumeAmmo,syncWeapons,accepts,receive} from './inventory.js';
@@ -44,7 +45,7 @@ export function createGame(seed=1947,definition=factoryMap(),detect=true,difficu
  definition.starts.forEach((p,i)=>add('squad',cast[i][0],cast[i][1],p.x,p.y,cast[i][2],levelOf(p)));
  const names=['Boris','Lev','Grigori','Oleg','Pavel','Igor','Anton','Vadim','Yuri','Sasha','Pyotr','Nikolai'];
  definition.guards.forEach((g,i)=>{add('guard',names[i]||`Guard ${i+1}`,g.species,g.x,g.y,g.weapon,levelOf(g));if(g.outfit)s.units.at(-1).outfit=g.outfit;});
- for(const u of s.units){initInventory(u,WEAPONS);if(u.team==='squad')initProgression(u);}s.loot=definition.starts.map((p,i)=>({...p,items:[{type:'ammo',kind:i%2?'rifle':'pistol',count:i%2?5:8}]}));
+ for(const u of s.units){initInventory(u,WEAPONS);if(u.team==='squad'){initProgression(u);initPersonality(u);}}s.loot=definition.starts.map((p,i)=>({...p,items:[{type:'ammo',kind:i%2?'rifle':'pistol',count:i%2?5:8}]}));
  if(definition.name==='Factory test')s.loot[0].items.push({type:'weapon',kind:'flamethrower',rounds:4},{type:'ammo',kind:'flamethrower',count:4});
  if(detect)refresh(s);log(s,`Local map ready / ${definition.guards.length} guards.`);return s;
 }
@@ -122,12 +123,13 @@ export function coverAgainst(s,a,b){
  const dx=a.x-b.x,dy=a.y-b.y;if(dx===0&&dy===0)return false;const cells=[];if(Math.abs(dx)>=Math.abs(dy)*.5)cells.push([b.x+Math.sign(dx),b.y]);if(Math.abs(dy)>=Math.abs(dx)*.5)cells.push([b.x,b.y+Math.sign(dy)]);
  return cells.some(([x,y])=>tile(s,x,y,levelOf(b))==='crate'||PROPS[propAt(s,x,y,levelOf(b))?.kind]?.cover>0||(EDGES[s.edges[edgeBetween(b,{x,y,z:levelOf(b)})]]?.cover||0)>0);
 }
-export function previewAttack(s,a,b,burst=false,zone='torso'){
- if(!a||!b||!alive(a)||!alive(b)||a.team===b.team)return {ok:false,reason:'Choose a living opponent'};
+const retaliationToken=Symbol('retaliation');
+export function previewAttack(s,a,b,burst=false,zone='torso',token=null){
+ if(!a||!b||!alive(a)||!alive(b)||a.team===b.team&&token!==retaliationToken)return {ok:false,reason:'Choose a living opponent'};
  if(!Object.hasOwn(AIM_ZONES,zone))return {ok:false,reason:'Choose an aim location'};
  const aim=AIM_ZONES[zone];
  const w=WEAPONS[a.weapon],rounds=burst&&a.weapon==='assault'?3:1,cost=w.cost+(rounds===3?2:0),melee=w.mag===0,range=melee?distance(a,b):Math.hypot(a.x-b.x,a.y-b.y);
- const visible=a.team==='squad'?squad(s).some(p=>canSee(s,p,b)):canSee(s,a,b);
+ const visible=token!==retaliationToken&&a.team==='squad'?squad(s).some(p=>canSee(s,p,b)):canSee(s,a,b);
  const cover=!melee&&coverAgainst(s,a,b),heightCover=!melee&&levelOf(b)>levelOf(a)&&(a.x!==b.x||a.y!==b.y),coverPenalty=cover?25:heightCover?15:0,rangePenalty=melee?0:Math.max(0,levelOf(b)-levelOf(a)),effectiveRange=Math.max(0,w.range-rangePenalty);
  const chance=Math.max(10,Math.min(95,a.accuracy+(melee?10:0)+aim.accuracy-Math.max(0,range+rangePenalty-3)*3-coverPenalty-(rounds===3?10:0)));
  let reason='';
@@ -183,28 +185,39 @@ export function attack(s,a,b,burst=false,byAI=false,zone='torso',reaction=false)
  if(reaction?!(s.phase==='enemy'&&a?.team==='squad'&&alive(a)&&!a.burningTurns&&a.overwatch?.weapon===a.weapon&&a.overwatch.heading===a.heading&&!burst&&zone==='torso'&&canSee(s,a,b)):byAI?!(s.phase==='enemy'&&a?.team==='guard'&&alive(a)&&!a.burningTurns):!canControl(s,a))return false;
  const p=previewAttack(s,reaction?{...a,ap:WEAPONS[a.weapon].cost}:a,b,burst,zone);if(!p.ok)return false;a.overwatch=null;
  if(b.team==='guard'){b.alert=true;b.lastKnown={x:a.x,y:a.y,z:levelOf(a)};}if(s.phase==='explore'){b.alert=true;refresh(s);} // Opening attacks always spend combat AP.
- if(!reaction)a.ap-=p.cost;emitNoise(s,a,WEAPONS[a.weapon].mag?30:2);if(WEAPONS[a.weapon].incendiary)a.ammo[a.weapon]-=p.rounds;
- const firedWeapon=a.weapon,weapon=WEAPONS[firedWeapon],incendiary=!!weapon.incendiary,ballistic=weapon.mag&&!incendiary;
- let damage=0;const trajectories=[],explosions=[],victims=new Map(),aimTarget={...b};
- for(let i=0;i<p.rounds&&alive(a);i++){
-  if(ballistic)a.ammo[firedWeapon]--;
-  const accurate=random(s)*100<p.chance;
-  const shot=ballistic?bulletTrajectory(s,a,aimTarget,{accurate,zone,chance:p.chance,burst:p.rounds>1,reach:weapon.range*1.5},()=>random(s)):null;
+ if(!reaction)a.ap-=p.cost;
+ const trajectories=[],explosions=[],sequence=[];
+ // A stack suspends the current burst while a reply resolves; ammunition bounds chains.
+ const frames=[{a,b,p,zone,left:p.rounds,weapon:a.weapon,aim:{...b},reply:false}];
+ while(frames.length){
+  const f=frames.at(-1),shooter=f.a,target=f.b,w=WEAPONS[f.weapon];
+  if(!f.left||!alive(shooter)||shooter.burningTurns||w.mag&&shooter.ammo[f.weapon]<1){frames.pop();continue;}
+  f.left--;shooter.overwatch=null;shooter.heading=headingTo(shooter,f.aim);shooter.facing=(f.aim.x-shooter.x)-(f.aim.y-shooter.y)>=0?1:-1;
+  emitNoise(s,shooter,w.mag?30:2);if(w.mag)shooter.ammo[f.weapon]--;
+  const accurate=random(s)*100<f.p.chance,ballistic=w.mag&&!w.incendiary;
+  const shot=ballistic?bulletTrajectory(s,shooter,f.aim,{accurate,zone:f.zone,chance:f.p.chance,burst:f.p.rounds>1,reach:w.range*1.5},()=>random(s)):null;
   if(shot)trajectories.push(shot);
-  const victim=ballistic?s.units.find(u=>u.id===shot.unitId):accurate?b:null;
-  if(!victim)continue;
-  const hitZone=shot?.zone||zone,amount=Math.round(Math.round(weapon.damage*AIM_ZONES[hitZone].damage)*(a.team==='guard'&&!incendiary?.65:1));
-  damage+=amount;victims.set(victim.id,(victims.get(victim.id)||0)+amount);
-  if(victim.team==='guard'){victim.alert=true;victim.lastKnown={x:a.x,y:a.y,z:levelOf(a)};}
-  const tankChance=weapon.mag?tankExplosionChance(victim,hitZone):0;
-  if(tankChance>0&&random(s)<tankChance)explosions.push(explodeTanks(s,victim));
-  else {combatDamage(s,victim,amount,incendiary||incapacitated(victim));if(incendiary)ignite(s,victim);}
+  const victim=ballistic?s.units.find(u=>u.id===shot.unitId):accurate&&alive(target)?target:null;
+  const event={ax:shooter.x,ay:shooter.y,bx:f.aim.x,by:f.aim.y,az:levelOf(shooter),bz:levelOf(f.aim),hit:!!victim,incendiary:!!w.incendiary,trajectories:shot?[shot]:[],explosions:[],reply:f.reply};sequence.push(event);
+  if(!victim){log(s,`${shooter.name} → ${target.name}: miss${f.reply?' / retaliation':''}.`);continue;}
+  const hitZone=shot?.zone||f.zone,amount=Math.round(Math.round(w.damage*AIM_ZONES[hitZone].damage)*(shooter.team==='guard'&&!w.incendiary?.65:1));
+  if(victim.team==='guard'){victim.alert=true;victim.lastKnown={x:shooter.x,y:shooter.y,z:levelOf(shooter)};}
+  const tankChance=w.mag?tankExplosionChance(victim,hitZone):0;
+  if(tankChance>0&&random(s)<tankChance){const blast=explodeTanks(s,victim);explosions.push(blast);event.explosions.push(blast);}
+  else {combatDamage(s,victim,amount,!!w.incendiary||incapacitated(victim));if(w.incendiary)ignite(s,victim);}
+  const friendly=victim.team===shooter.team;
+  log(s,`${shooter.name} → ${victim.name}: ${amount} damage${friendly?' / friendly fire':''}${f.reply?' / retaliation':''}${!alive(victim)?' / down':''}.`);
+  if(friendly&&victim.team==='squad'&&alive(victim)){
+   const armed=WEAPONS[victim.weapon].mag>0,turned={...victim,heading:headingTo(victim,shooter),ap:WEAPONS[victim.weapon].cost};
+   const reply=armed&&alive(shooter)?previewAttack(s,turned,shooter,false,'torso',retaliationToken):{ok:false};
+   const response=friendlyReaction(s,victim,shooter,amount,reply.ok);
+   if(response){event.dialogue=`${response.speaker}: “${response.line}”`;log(s,event.dialogue);if(response.retaliate){frames.push({a:victim,b:shooter,p:reply,zone:'torso',left:1,weapon:victim.weapon,aim:{...shooter},reply:true});}}
+  }
  }
- a.heading=headingTo(a,b);a.facing=(b.x-a.x)-(b.y-a.y)>=0?1:-1;
- s.effect={ax:a.x,ay:a.y,bx:b.x,by:b.y,az:levelOf(a),bz:levelOf(b),hit:damage>0,incendiary,explosion:explosions.at(-1),explosions,trajectories};
- const collateral=[...victims].filter(([id])=>id!==b.id).map(([id,amount])=>{const u=s.units.find(u=>u.id===id);return `${u.name}${u.team===a.team?' (friendly fire)':''}: ${amount}`;});
- log(s,`${a.name} → ${b.name}: ${damage?`${damage} damage`:'miss'}${collateral.length?' / '+collateral.join(', '):''}${!alive(b)?' / down':''}.`);refresh(s);if(byAI)resolveOverwatch(s,a);return true;
+ s.effect={...sequence[0],trajectories,explosions,explosion:explosions.at(-1),sequence};
+ refresh(s);if(byAI)resolveOverwatch(s,a);return true;
 }
+
 export function equip(s,u,id,slot=1){if(!canControl(s,u)||s.queue.length||!WEAPONS[id]||u.weapon===id||!(id==='hands'||u.pack.some(i=>i.type==='weapon'&&i.kind===id)))return false;const stored=id!=='hands'&&!u.slots.includes(id),cost=stored?3:0;if(s.phase==='player'&&u.ap<cost)return false;const slots=[...u.slots];if(stored)slots[slot===0?0:1]=id;const layout=gridLayout({...u,slots});if(!layout.ok)return false;if(s.phase==='player')u.ap-=cost;u.slots=slots;storeLayout(u,layout);u.weapon=id;if(id==='flamethrower')delete u.tanksExploded;u.overwatch=null;log(s,u.name+' equipped '+WEAPONS[id].name+'.');return true;}
 export function equipCutters(s,u,slot){
  if(!canControl(s,u)||s.queue.length||!u.wireCutters||![0,1].includes(slot)||u.slots.includes('wireCutters'))return false;
@@ -221,7 +234,7 @@ export function endTurn(s){if(s.phase!=='player'||s.queue.length)return false;fo
 export function stepEnemy(s){
  if(s.phase!=='enemy')return false;
  const g=s.units[s.enemyIndex];
- if(!g){finishFireRound(s);s.phase='player';s.round++;for(const p of squad(s)){p.ap=p.burningTurns?0:p.maxAp;p.overwatch=null;}refresh(s);log(s,`Squad turn / ${s.round}.`);return true;}
+ if(!g){finishFireRound(s);s.phase='player';s.round++;for(const p of squad(s)){p.ap=p.burningTurns?0:p.maxAp;p.overwatch=null;settleStress(p,2);}refresh(s);log(s,`Squad turn / ${s.round}.`);return true;}
  if(g.team!=='guard'||!alive(g)||g.burningTurns>0||!g.alert||g.ap<1){s.enemyIndex++;return true;}
  const targets=squad(s).filter(p=>canSee(s,g,p)).sort((a,b)=>distance(g,a)-distance(g,b));
  const target=targets[0];if(target)g.lastKnown={x:target.x,y:target.y,z:levelOf(target)};
@@ -234,7 +247,7 @@ export function stepEnemy(s){
 }
 
 export function stabilizePreview(s,medic,patient){const cost=medicalCost(medic);let reason='';if(!canControl(s,medic)||s.queue.length)reason='Cannot act now';else if(!s.units.includes(patient)||patient.team!=='squad'||patient.casualty!=='bleeding'||patient.bleedTurns<=0)reason='Choose a bleeding teammate';else if(!medic.medkits)reason='No medkits remaining';else if(levelOf(medic)!==levelOf(patient)||Math.abs(medic.x-patient.x)+Math.abs(medic.y-patient.y)!==1||blockedEdge(s,medic,patient))reason='Stand beside the casualty with an open edge';else if(s.phase==='player'&&medic.ap<cost)reason='Not enough AP';return {ok:!reason,reason,cost};}
-export function stabilize(s,medic,patient){const p=stabilizePreview(s,medic,patient);if(!p.ok)return false;if(s.phase==='player')medic.ap-=p.cost;medic.medkits--;patient.casualty='stable';patient.bleedTurns=0;log(s,medic.name+' stabilized '+patient.name+'.');refresh(s);return true;}
+export function stabilize(s,medic,patient){const p=stabilizePreview(s,medic,patient);if(!p.ok)return false;if(s.phase==='player')medic.ap-=p.cost;medic.medkits--;patient.casualty='stable';patient.bleedTurns=0;const thanks=helped(patient,medic);if(thanks)log(s,patient.name+': '+thanks);log(s,medic.name+' stabilized '+patient.name+'.');refresh(s);return true;}
 export function cutPreview(s,u,edge){let reason='';const cost=4;if(!canControl(s,u)||s.queue.length)reason='Cannot act now';else if(!u.wireCutters)reason='Wire cutters required';else if(!u.slots.includes('wireCutters'))reason='Equip wire cutters in a held slot';else if(s.edges[edge]!=='fence-chainlink')reason='Choose a chain-link fence';else if(!edgeCells(edge).some(p=>p.x===u.x&&p.y===u.y&&levelOf(p)===levelOf(u)))reason='Stand beside the fence';else if(s.phase==='player'&&u.ap<cost)reason='Not enough AP';return {ok:!reason,reason,cost};}
 export function cutFence(s,u,edge){const p=cutPreview(s,u,edge);if(!p.ok)return false;if(s.phase==='player')u.ap-=p.cost;s.edges[edge]='fence-cut';u.overwatch=null;log(s,u.name+' cut a passable opening in the fence.');refresh(s);return true;}
 
