@@ -1,4 +1,5 @@
 import {initProgression,awardCombatXP,train} from './progression.js';
+import {bulletTrajectory} from './projectiles.js';
 import {gridLayout,storeLayout,placeItem,initInventory,reserve,consumeAmmo,syncWeapons,accepts,receive} from './inventory.js';
 import {inCone,headingTo} from './perception.js';
 export {inCone,headingTo} from './perception.js';
@@ -131,7 +132,9 @@ export function previewAttack(s,a,b,burst=false,zone='torso'){
  const chance=Math.max(10,Math.min(95,a.accuracy+(melee?10:0)+aim.accuracy-Math.max(0,range+rangePenalty-3)*3-coverPenalty-(rounds===3?10:0)));
  let reason='';
  if(a.burningTurns>0)reason='On fire: running in panic';else if(melee&&zone!=='torso')reason='Aimed shots require a firearm';else if(!visible)reason='Target not visible';else if(!inCone(a,b))reason='Outside personal sight cone';else if(range>effectiveRange)reason='Out of range';else if(!lineOfSight(s,a,b))reason='Line of fire blocked';else if(w.mag&&a.ammo[a.weapon]<rounds)reason='Reload required';else if(!['explore','won'].includes(s.phase)&&a.ap<cost)reason='Not enough AP';
- return {ok:!reason,reason,cost,rounds,chance:Math.round(chance),cover,heightCover,coverPenalty,rangePenalty,damage:Math.round(w.damage*aim.damage),zone,range:effectiveRange,tankChance:melee?0:tankExplosionChance(b,zone)};
+ let obstruction=null;
+ if(!reason&&!melee&&!w.incendiary){const path=bulletTrajectory(s,a,b,{accurate:true,zone,reach:w.range*1.5},()=>0);if(path.unitId!==b.id){const unit=s.units.find(u=>u.id===path.unitId);obstruction=unit?{kind:'unit',id:unit.id,name:unit.name,friendly:unit.team===a.team}:{kind:path.kind};}}
+ return {ok:!reason,reason,cost,rounds,chance:Math.round(chance),cover,heightCover,coverPenalty,rangePenalty,damage:Math.round(w.damage*aim.damage),zone,range:effectiveRange,tankChance:melee?0:tankExplosionChance(b,zone),obstruction};
 }
 function random(s){s.seed=(Math.imul(s.seed,1664525)+1013904223)>>>0;return s.seed/4294967296;}
 function combatDamage(s,u,damage,fatal=false){
@@ -180,13 +183,27 @@ export function attack(s,a,b,burst=false,byAI=false,zone='torso',reaction=false)
  if(reaction?!(s.phase==='enemy'&&a?.team==='squad'&&alive(a)&&!a.burningTurns&&a.overwatch?.weapon===a.weapon&&a.overwatch.heading===a.heading&&!burst&&zone==='torso'&&canSee(s,a,b)):byAI?!(s.phase==='enemy'&&a?.team==='guard'&&alive(a)&&!a.burningTurns):!canControl(s,a))return false;
  const p=previewAttack(s,reaction?{...a,ap:WEAPONS[a.weapon].cost}:a,b,burst,zone);if(!p.ok)return false;a.overwatch=null;
  if(b.team==='guard'){b.alert=true;b.lastKnown={x:a.x,y:a.y,z:levelOf(a)};}if(s.phase==='explore'){b.alert=true;refresh(s);} // Opening attacks always spend combat AP.
- if(!reaction)a.ap-=p.cost;emitNoise(s,a,WEAPONS[a.weapon].mag?30:2);if(WEAPONS[a.weapon].mag)a.ammo[a.weapon]-=p.rounds;
- const incendiary=!!WEAPONS[a.weapon].incendiary;let damage=0,detonate=false;
- for(let i=0;i<p.rounds;i++)if(random(s)*100<p.chance){damage+=Math.round(p.damage*(a.team==='guard'&&!incendiary?.65:1));if(!detonate&&p.tankChance>0&&random(s)<p.tankChance)detonate=true;}
- const explosion=detonate?explodeTanks(s,b):null;
- if(!detonate){combatDamage(s,b,damage,incendiary);if(incendiary&&damage>0)ignite(s,b);}
- a.heading=headingTo(a,b);a.facing=(b.x-a.x)-(b.y-a.y)>=0?1:-1;s.effect={ax:a.x,ay:a.y,bx:b.x,by:b.y,az:levelOf(a),bz:levelOf(b),hit:damage>0,incendiary,explosion};
- log(s,`${a.name} → ${b.name}: ${damage?`${damage} damage`:'miss'}${!alive(b)?' / down':''}.`);refresh(s);if(byAI)resolveOverwatch(s,a);return true;
+ if(!reaction)a.ap-=p.cost;emitNoise(s,a,WEAPONS[a.weapon].mag?30:2);if(WEAPONS[a.weapon].incendiary)a.ammo[a.weapon]-=p.rounds;
+ const firedWeapon=a.weapon,weapon=WEAPONS[firedWeapon],incendiary=!!weapon.incendiary,ballistic=weapon.mag&&!incendiary;
+ let damage=0;const trajectories=[],explosions=[],victims=new Map(),aimTarget={...b};
+ for(let i=0;i<p.rounds&&alive(a);i++){
+  if(ballistic)a.ammo[firedWeapon]--;
+  const accurate=random(s)*100<p.chance;
+  const shot=ballistic?bulletTrajectory(s,a,aimTarget,{accurate,zone,chance:p.chance,burst:p.rounds>1,reach:weapon.range*1.5},()=>random(s)):null;
+  if(shot)trajectories.push(shot);
+  const victim=ballistic?s.units.find(u=>u.id===shot.unitId):accurate?b:null;
+  if(!victim)continue;
+  const hitZone=shot?.zone||zone,amount=Math.round(Math.round(weapon.damage*AIM_ZONES[hitZone].damage)*(a.team==='guard'&&!incendiary?.65:1));
+  damage+=amount;victims.set(victim.id,(victims.get(victim.id)||0)+amount);
+  if(victim.team==='guard'){victim.alert=true;victim.lastKnown={x:a.x,y:a.y,z:levelOf(a)};}
+  const tankChance=weapon.mag?tankExplosionChance(victim,hitZone):0;
+  if(tankChance>0&&random(s)<tankChance)explosions.push(explodeTanks(s,victim));
+  else {combatDamage(s,victim,amount,incendiary||incapacitated(victim));if(incendiary)ignite(s,victim);}
+ }
+ a.heading=headingTo(a,b);a.facing=(b.x-a.x)-(b.y-a.y)>=0?1:-1;
+ s.effect={ax:a.x,ay:a.y,bx:b.x,by:b.y,az:levelOf(a),bz:levelOf(b),hit:damage>0,incendiary,explosion:explosions.at(-1),explosions,trajectories};
+ const collateral=[...victims].filter(([id])=>id!==b.id).map(([id,amount])=>{const u=s.units.find(u=>u.id===id);return `${u.name}${u.team===a.team?' (friendly fire)':''}: ${amount}`;});
+ log(s,`${a.name} → ${b.name}: ${damage?`${damage} damage`:'miss'}${collateral.length?' / '+collateral.join(', '):''}${!alive(b)?' / down':''}.`);refresh(s);if(byAI)resolveOverwatch(s,a);return true;
 }
 export function equip(s,u,id,slot=1){if(!canControl(s,u)||s.queue.length||!WEAPONS[id]||u.weapon===id||!(id==='hands'||u.pack.some(i=>i.type==='weapon'&&i.kind===id)))return false;const stored=id!=='hands'&&!u.slots.includes(id),cost=stored?3:0;if(s.phase==='player'&&u.ap<cost)return false;const slots=[...u.slots];if(stored)slots[slot===0?0:1]=id;const layout=gridLayout({...u,slots});if(!layout.ok)return false;if(s.phase==='player')u.ap-=cost;u.slots=slots;storeLayout(u,layout);u.weapon=id;if(id==='flamethrower')delete u.tanksExploded;u.overwatch=null;log(s,u.name+' equipped '+WEAPONS[id].name+'.');return true;}
 export function equipCutters(s,u,slot){
