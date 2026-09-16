@@ -205,7 +205,7 @@ export function attack(s,a,b,burst=false,byAI=false,zone='torso',reaction=false)
   const f=frames.at(-1),shooter=f.a,target=f.b,w=WEAPONS[f.weapon];
   if(!f.left||!alive(shooter)||shooter.burningTurns||w.mag&&shooter.ammo[f.weapon]<1){frames.pop();continue;}
   f.left--;shooter.overwatch=null;shooter.heading=headingTo(shooter,f.aim);shooter.facing=(f.aim.x-shooter.x)-(f.aim.y-shooter.y)>=0?1:-1;
-  emitNoise(s,shooter,w.mag?30:2);if(w.mag)shooter.ammo[f.weapon]--;
+  emitNoise(s,shooter,w.mag?30:2);if(w.mag)alarm(s,shooter,w.range*2);if(w.mag)shooter.ammo[f.weapon]--;
   const accurate=w.blast?false:random(s)*100<f.p.chance,ballistic=w.mag&&!w.incendiary;
   const shot=w.blast?explosiveTrajectory(s,shooter,f.aim,w,f.p,()=>random(s)):ballistic?bulletTrajectory(s,shooter,f.aim,{accurate,zone:f.zone,chance:f.p.chance,burst:f.p.rounds>1,reach:w.range*1.5},()=>random(s)):null;
   if(shot)trajectories.push(shot);
@@ -290,6 +290,9 @@ export function turnTo(s,u,heading){if(!canControl(s,u)||s.queue.length||!Number
 export function setSneaking(s,u){if(!canControl(s,u)||s.queue.length)return false;u.sneaking=!u.sneaking;u.overwatch=null;refresh(s);return true;}
 // Suspicion is approximate: the 6-tile grid cell nearest the source, shared by hearing and peripheral glimpses.
 const approximate=u=>({x:Math.max(0,Math.min(W-1,Math.round(u.x/6)*6)),y:Math.max(0,Math.min(H-1,Math.round(u.y/6)*6)),z:levelOf(u)});
+// A gunshot alerts every guard within twice the weapon's range, squad or guard shooter alike. Guards already alert keep
+// their own, better fix; the rest converge on the approximate report. Suspicion beyond that ring is unchanged (emitNoise).
+export function alarm(s,shooter,radius){for(const g of guards(s))if(g!==shooter&&!g.alert&&distance(g,shooter)<=radius){g.alert=true;g.lastKnown=approximate(shooter);}}
 export function emitNoise(s,u,radius){if(u.team!=='squad')return;for(const g of guards(s))if(!canSee(s,g,u)&&distance(g,u)<=radius){g.lastHeard=approximate(u);g.searchSteps=12;}}
 export function stepInvestigation(s){if(!['explore','won'].includes(s.phase))return false;for(const g of guards(s))if(g.lastHeard&&g.searchSteps>0){const dest=g.lastHeard;g.heading=headingTo(g,dest);const path=pathTo(s,g,dest.x,dest.y,dest.z);g.searchSteps--;if(path?.length){const p=path[0];g.x=p.x;g.y=p.y;g.z=p.z;g.steps++;}else g.searchSteps=0;if(!g.searchSteps)g.lastHeard=null;refresh(s);return true;}return false;}
 export function setOverwatch(s,u){if(!canControl(s,u)||s.phase!=='player'||s.queue.length||u.overwatch||!WEAPONS[u.weapon].mag||u.ammo[u.weapon]<1||u.ap<WEAPONS[u.weapon].cost)return false;u.ap-=WEAPONS[u.weapon].cost;u.overwatch={weapon:u.weapon,heading:u.heading};log(s,u.name+' reserved one overwatch shot.');return true;}
