@@ -14,7 +14,7 @@ export const WEAPONS={
  rifle:{name:'Mosin-Nagant',short:'Mosin',cost:6,range:14,damage:48,mag:5},
  assault:{name:'AK-47',short:'AK-47',cost:4,range:10,damage:26,mag:30}
 };
-export const AIM_ZONES={torso:{label:'Torso',accuracy:0,damage:1},head:{label:'Head',accuracy:-25,damage:1.5},arms:{label:'Arms',accuracy:-15,damage:.75},legs:{label:'Legs',accuracy:-10,damage:.85}};
+export const AIM_ZONES={head:{label:'Head',accuracy:-25,damage:1.5},weapon:{label:'Weapon',accuracy:-15,damage:.75},torso:{label:'Torso',accuracy:0,damage:1},legs:{label:'Legs',accuracy:-10,damage:.85}};
 export const STANCES={standing:{label:'Standing',moveCost:2},kneeling:{label:'Kneeling',moveCost:4},prone:{label:'Prone',moveCost:8}};
 export const stanceOf=u=>Object.hasOwn(STANCES,u?.stance)?u.stance:'standing';
 export function movementNeighbors(s,u,p=u,stairs){return neighbors(s,p,stairs).filter(q=>(levelOf(q)===levelOf(p)||stanceOf(u)==='standing')&&!(levelOf(q)===levelOf(p)&&q.x!==p.x&&q.y!==p.y&&[occupant(s,q.x,p.y,levelOf(p)),occupant(s,p.x,q.y,levelOf(p))].some(v=>v&&v!==u))).map(q=>({...q,cost:levelOf(q)===levelOf(p)?(STANCES[stanceOf(u)].moveCost+(u.sneaking?2:0))*q.cost:q.cost}));}
