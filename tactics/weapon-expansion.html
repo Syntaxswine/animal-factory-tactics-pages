@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Weapon sprites · Animal Factory Tactics</title>
+<style>
+body{margin:0;background:#26372e;color:#f5e6c9;font:16px system-ui}header{padding:24px;position:sticky;top:0;background:#1a2923;z-index:1;border-bottom:1px solid #65705a}h1{margin:0 0 12px;font-size:24px}nav{display:flex;flex-wrap:wrap;gap:16px;align-items:center}select{font:inherit;padding:5px;background:#f5e6c9;color:#26372e}a{color:#f4c878}#gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(390px,1fr));gap:16px;padding:24px}figure{margin:0;background:#34473b;border:1px solid #63755f;border-radius:6px;overflow:hidden}figcaption{padding:12px;border-top:1px solid #63755f}.stage{height:272px;display:flex;align-items:center;justify-content:center;background-color:#394c3e;background-image:linear-gradient(45deg,#ffffff06 25%,transparent 25%,transparent 75%,#ffffff06 75%),linear-gradient(45deg,#ffffff06 25%,transparent 25%,transparent 75%,#ffffff06 75%);background-size:32px 32px;background-position:0 0,16px 16px}.stage img{height:256px;max-width:100%;object-fit:contain}.small .stage{height:144px}.small img{height:128px}.mirror img{transform:scaleX(-1)}#count{margin:12px 0 0;color:#c4cbb9}@media(max-width:440px){#gallery{grid-template-columns:1fr;padding:12px}}
+</style>
+<header>
+ <h1>Weapon sprite expansion</h1>
+ <nav>
+  <label>Animal <select id="species"><option value="all">All animals</option></select></label>
+  <label>Uniform <select id="outfit"><option value="all">All uniforms</option><option value="normal">Original</option><option value="red-hats">Red Hats</option></select></label>
+  <label>Weapon <select id="weapon"><option value="all">All weapons</option></select></label>
+  <label>Stance <select id="stance"><option value="all">All stances</option><option>standing</option><option>kneeling</option><option>prone</option></select></label>
+  <label><input id="small" type="checkbox"> Half size</label>
+  <label><input id="mirror" type="checkbox"> Face left</label>
+  <a href="character-art.html">Character gallery</a>
+ </nav>
+ <p id="count"></p>
+</header>
+<main id="gallery"></main>
+<script type="module" src="./weapon-expansion-review.js"></script>
+</html>

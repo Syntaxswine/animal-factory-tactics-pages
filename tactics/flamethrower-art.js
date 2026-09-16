@@ -1,5 +1,7 @@
 // Equipment overlay shared by all existing character poses and outfits.
+import {weaponExpansionArt} from './weapon-expansion-art.js';
 export function drawFlamethrower(ctx,unit,zoom){
+ if(weaponExpansionArt(unit.species,unit.weapon,unit.stance||'standing',unit.outfit==='red-hats'?'red-hats':'normal'))return;
  if(['grenade','launcher','rpg'].includes(unit.weapon)){drawExplosiveWeapon(ctx,unit,zoom);return;}
  if(unit.weapon!=='flamethrower')return;
  const stance=unit.stance||'standing',y=stance==='prone'?-16:stance==='kneeling'?-29:-42;

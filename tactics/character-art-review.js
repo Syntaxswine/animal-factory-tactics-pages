@@ -1,5 +1,6 @@
 import {CHARACTER_SPECIES,CHARACTER_STANCES,characterArt} from './character-art.js';
-const weapons=[['hands','Hand to hand · default'],['knife','NR-40 knife'],['pistol','TT-33 pistol'],['rifle','Mosin-Nagant'],['assault','AK-47']];
+import {EXPANSION_WEAPON_LABELS} from './weapon-expansion-art.js';
+const weapons=[['hands','Hand to hand · default'],['knife','NR-40 knife'],['pistol','TT-33 pistol'],['rifle','Mosin-Nagant'],['assault','AK-47'],...Object.entries(EXPANSION_WEAPON_LABELS)];
 const gallery=document.querySelector('#gallery'),species=document.querySelector('#species');
 for(const name of CHARACTER_SPECIES)species.add(new Option(name.replaceAll('-',' '),name));
 const requested=new URLSearchParams(location.search).get('species');if(CHARACTER_SPECIES.includes(requested))species.value=requested;
