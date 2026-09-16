@@ -1,4 +1,4 @@
-import {alive,canControl,cutPreview,stabilizePreview,WEAPONS} from './engine.js';
+import {alive,canControl,cutPreview,stabilizePreview,previewAttack,pathCost,WEAPONS} from './engine.js';
 import {blockedEdge,edgeCells,edgeKey,levelOf,tileKey} from './maps.js';
 
 // Small vector cursors stay sharp and use explicit hotspots for precise tile/edge picking.
@@ -15,19 +15,42 @@ export const cursorStyle=kind=>styles[kind]||({blocked:'not-allowed',pan:'grabbi
 export function contextAction(s,u,{actorId=null,point=null,edge=null}={}){
  const actor=s.units.find(a=>a.id===actorId);
  const select=actor?.team==='squad'&&alive(actor)?{kind:'interact',action:'select',id:actor.id,label:'Select '+actor.name}:null;
- if(!canControl(s,u))return select||{kind:'wait',action:'none'};
  if(actor?.team==='guard'&&alive(actor)&&s.detected.has(actor.id))return {kind:WEAPONS[u.weapon].mag?'shoot':'interact',action:'target',id:actor.id};
- if(edge&&cutPreview(s,u,edge).ok&&edgeCells(edge).some(p=>s.seen.has(tileKey(p.x,p.y,levelOf(p)))))return {kind:'cut',action:'cut',edge,label:'Cut fence · '+(s.phase==='player'?'4 AP':'free')};
+ if(edge&&s.edges[edge]==='fence-chainlink'&&edgeCells(edge).some(p=>p.x===u.x&&p.y===u.y&&levelOf(p)===levelOf(u))&&edgeCells(edge).some(p=>s.seen.has(tileKey(p.x,p.y,levelOf(p)))))return {kind:'cut',action:'cut',edge,label:'Cut fence'};
  if(select)return select;
+ if(!canControl(s,u))return {kind:'wait',action:'none'};
  if(!s.queue.length&&point&&s.visible.has(tileKey(point.x,point.y,levelOf(point)))){
   const same=p=>p.x===point.x&&p.y===point.y&&levelOf(p)===levelOf(point);
-  const patient=s.units.find(p=>same(p)&&stabilizePreview(s,u,p).ok);
+  const patient=s.units.find(p=>same(p)&&p.team==='squad'&&p.casualty==='bleeding');
   if(patient)return {kind:'interact',action:'stabilize',id:patient.id,label:'Stabilize '+patient.name};
   const near=levelOf(u)===levelOf(point)&&Math.abs(u.x-point.x)+Math.abs(u.y-point.y)<=1;
   if(near&&(same(u)||!blockedEdge(s,u,point))&&s.loot.some(p=>same(p)&&p.items.length))return {kind:'interact',action:'loot',label:'Inspect supplies · open inventory'};
   if(s.definition.exits.some(same)&&levelOf(u)===levelOf(point)&&Math.hypot(u.x-point.x,u.y-point.y)<=2)return {kind:'interact',action:'travel',label:'Open overmap'};
  }
  return {kind:'walk',action:'move'};
+}
+
+// Preview the actual action, retaining its cost even when it cannot currently be performed.
+export function actionCost(s,u,action,{route=null,burst=false,aimZone='torso'}={}){
+ if(!action)return null;
+ const free=['explore','won'].includes(s.phase),result=(cost,reason='',estimated=false)=>({cost,valid:!reason,reason,estimated});
+ if(action.action==='select')return result(0);
+ if(action.action==='target'){
+  const target=s.units.find(t=>t.id===action.id);if(!target)return result(null,'No target');
+  const preview=previewAttack(s,u,target,burst,aimZone);return result(preview.cost,!canControl(s,u)||s.queue.length?'Cannot act now':preview.reason);
+ }
+ if(action.action==='cut'||action.action==='stabilize'){
+  const preview=action.action==='cut'?cutPreview(s,u,action.edge):stabilizePreview(s,u,s.units.find(t=>t.id===action.id));
+  return result(free?0:preview.cost,preview.reason);
+ }
+ if(action.action==='move'){
+  const cost=route?.length?(free?0:pathCost(route)):null;
+  if(!canControl(s,u))return result(cost,'Cannot act now');
+  if(!route?.length)return result(null,'No route');
+  return result(cost,!free&&cost>u.ap?'Not enough AP':'',route.some(p=>!s.seen.has(tileKey(p.x,p.y,levelOf(p)))));
+ }
+ if(['loot','travel'].includes(action.action))return result(0,!canControl(s,u)||s.queue.length?'Cannot act now':'');
+ return result(null,'Cannot act now');
 }
 
 // Match the visible fence face as well as its ground edge; check only adjacent wire fences.
