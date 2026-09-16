@@ -1,7 +1,7 @@
 import {factoryMap,generateMap,blockedEdge,tileKey,levelOf,neighbors} from './maps.js';
 import {createGame,squad,guards,alive,refresh,walkable,log} from './engine.js';
 import {awardXP} from './progression.js';
-export const TRAVEL_MINUTES=60,PLAY_MINUTES_PER_SECOND=1;
+export const TRAVEL_MINUTES=60,PLAY_MINUTES_PER_SECOND=1,REST_RECOVERY_HOURS=48,MEDICAL_RECOVERY_HOURS=24,MEDIC_SKILL_REQUIRED=25;
 export function createWorld(custom=null,difficulty='standard') {
   return {difficulty,current:'factory',start:'factory',clock:{minutes:480,incomeRemainder:0},money:0,journeys:0,lastIncome:0,locations:{factory:{type:'factory'},yard:{type:'yard'},annex:{type:'factory'}},definitions:{factory:custom||factoryMap(),yard:generateMap(83,'Freight yard'),annex:generateMap(126,'Outer factory')},states:{factory:createGame(1947,custom||factoryMap(),true,difficulty)},links:[['factory','yard'],['yard','annex']]};
 }
@@ -38,15 +38,31 @@ export function downtimeReason(world){
  if(s.units.some(u=>u.team==='squad'&&['bleeding','stable'].includes(u.casualty)))return 'Resolve squad casualties first.';
  return '';
 }
-export function spendTime(world,activity,hours){
+export function medicalRestPreview(world,medicId=null){
+ const troops=squad(currentMap(world)).filter(u=>!u.casualty),medics=troops.filter(u=>u.medical>=MEDIC_SKILL_REQUIRED).sort((a,b)=>b.medical-a.medical);
+ const medic=medicId===null?medics[0]:medics.find(u=>u.id===medicId),wounded=troops.filter(u=>u.hp<u.maxHp),needsKit=wounded.filter(u=>!(u.medicalRestHours>0));
+ const kits=troops.reduce((sum,u)=>sum+u.medkits,0);
+ const reason=downtimeReason(world)||(!medic?'Choose an available medic with at least 25 Medical.':!wounded.length?'No wounded troops need treatment.':kits<needsKit.length?`Need ${needsKit.length} medkits; squad has ${kits}.`:'');
+ return {ok:!reason,reason,medic,kits,kitsNeeded:needsKit.length,needsKit};
+}
+export function spendTime(world,activity,hours,medicId=null){
  const error=downtimeReason(world);if(error)return {ok:false,error};
- if(!['rest','train'].includes(activity)||![1,4,8].includes(hours))return {ok:false,error:'Choose rest or training for 1, 4 or 8 hours.'};
+ if(!['rest','medical-rest','train'].includes(activity)||![1,4,8,24,48].includes(hours))return {ok:false,error:'Choose rest, medical care or training for 1, 4, 8, 24 or 48 hours.'};
  const s=currentMap(world),troops=squad(s).filter(u=>!u.casualty);
  if(activity==='train'&&!troops.some(u=>u.level<10))return {ok:false,error:'All available troops have reached level 10.'};
+ const treatment=activity==='medical-rest'?medicalRestPreview(world,medicId):null;
+ if(treatment&&!treatment.ok)return {ok:false,error:treatment.reason};
+ if(treatment){let needed=treatment.kitsNeeded;for(const donor of troops){const used=Math.min(donor.medkits,needed);donor.medkits-=used;needed-=used;}for(const patient of treatment.needsKit)patient.medicalRestHours=MEDICAL_RECOVERY_HOURS;}
  const income=advanceTime(world,hours*60);
- for(const u of troops){u.overwatch=null;if(activity==='rest'){u.hp=Math.min(u.maxHp,u.hp+Math.ceil(u.maxHp*.1*hours));u.ap=u.maxAp;}else if(u.level<10)awardXP(u,25*hours);}
- const message=activity==='rest'?`Squad rested for ${hours} hours; recovered up to ${hours*10}% maximum health.`:`Squad trained for ${hours} hours; +${25*hours} XP per eligible troop.`;
+ let healed=0;
+ for(const u of troops){u.overwatch=null;if(activity!=='train'){const assisted=Math.min(hours,u.medicalRestHours||0),before=u.hp;recoverHealth(u,assisted/MEDICAL_RECOVERY_HOURS+(hours-assisted)/REST_RECOVERY_HOURS);u.medicalRestHours=u.hp===u.maxHp?0:Math.max(0,(u.medicalRestHours||0)-assisted);healed+=u.hp-before;u.ap=u.maxAp;}else if(u.level<10)awardXP(u,25*hours);}
+ const message=activity==='train'?`Squad trained for ${hours} hour${hours===1?'':'s'}; +${25*hours} XP per eligible troop.`:`Squad rested for ${hours} hour${hours===1?'':'s'}; restored ${healed} HP total.`+(treatment?` ${treatment.medic.name} provided care; used ${treatment.kitsNeeded} medkits.`:'');
  refresh(s);log(s,message);return {ok:true,income,message};
+}
+function recoverHealth(u,fraction){
+ if(u.hp>=u.maxHp){u.restHealing=0;return;}
+ const recovery=(u.restHealing||0)+u.maxHp*fraction,whole=Math.floor(recovery+1e-9);
+ u.hp=Math.min(u.maxHp,u.hp+whole);u.restHealing=u.hp===u.maxHp?0:Math.max(0,recovery-whole);
 }
 export function travelReason(world,destination) {
   const s=currentMap(world);
