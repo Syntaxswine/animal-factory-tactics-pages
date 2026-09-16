@@ -295,6 +295,69 @@ export const PROP_ART = {
       1184
     ]
   },
+  "tree-broadleaf": {
+    "file": "foliage/tree-broadleaf.png",
+    "crop": [
+      93,
+      62,
+      1176,
+      1194
+    ]
+  },
+  "tree-pine": {
+    "file": "foliage/tree-pine.png",
+    "crop": [
+      292,
+      16,
+      1019,
+      1205
+    ]
+  },
+  "bush": {
+    "file": "foliage/bush.png",
+    "crop": [
+      178,
+      250,
+      1112,
+      996
+    ]
+  },
+  "reeds": {
+    "file": "foliage/reeds.png",
+    "crop": [
+      122,
+      94,
+      1186,
+      1146
+    ]
+  },
+  "roof-corrugated-flat": {
+    "file": "roof-corrugated-flat.png",
+    "crop": [
+      67,
+      253,
+      1187,
+      1036
+    ]
+  },
+  "roof-corrugated-sloped": {
+    "file": "roof-corrugated-sloped.png",
+    "crop": [
+      64,
+      166,
+      1213,
+      1119
+    ]
+  },
+  "roof-flat-parapet": {
+    "file": "roof-flat-parapet.png",
+    "crop": [
+      28,
+      190,
+      1227,
+      1101
+    ]
+  },
   "fence-cut": {
     "file": "fence-chainlink-cut.png",
     "crop": [
