@@ -1,4 +1,4 @@
-import {alive,canControl,cutPreview,stabilizePreview,previewAttack,pathCost,WEAPONS} from './engine.js';
+import {alive,canControl,cutPreview,stabilizePreview,previewAttack,pathCost,WEAPONS,groundTarget} from './engine.js';
 import {blockedEdge,edgeCells,edgeKey,levelOf,tileKey} from './maps.js';
 
 // Small vector cursors stay sharp and use explicit hotspots for precise tile/edge picking.
@@ -35,6 +35,7 @@ export function actionCost(s,u,action,{route=null,burst=false,aimZone='torso'}={
  if(!action)return null;
  const free=['explore','won'].includes(s.phase),result=(cost,reason='',estimated=false)=>({cost,valid:!reason,reason,estimated});
  if(action.action==='select')return result(0);
+ if(action.action==='ground'){const p=previewAttack(s,u,groundTarget(action.point));return result(p.cost,!canControl(s,u)||s.queue.length?'Cannot act now':p.reason);}
  if(action.action==='target'){
   const target=s.units.find(t=>t.id===action.id);if(!target)return result(null,'No target');
   const preview=previewAttack(s,u,target,burst,aimZone);return result(preview.cost,!canControl(s,u)||s.queue.length?'Cannot act now':preview.reason);

@@ -1,3 +1,4 @@
+import {explosivePreview,explosiveTrajectory,detonate} from './explosives.js';
 import {initPersonality,friendlyReaction,helped,settleStress,injuryStrain,killRelief} from './personalities.js';
 import {initProgression,awardCombatXP,train} from './progression.js';
 import {bulletTrajectory} from './projectiles.js';
@@ -15,6 +16,9 @@ export const WEAPONS={
  pistol:{name:'TT-33 pistol',short:'TT-33',cost:4,range:8,damage:27,mag:8},
  rifle:{name:'Mosin-Nagant',short:'Mosin',cost:6,range:14,damage:48,mag:5},
  assault:{name:'AK-47',short:'AK-47',cost:4,range:10,damage:26,mag:30},
+ grenade:{name:'Fragmentation grenade',short:'Grenade',cost:5,range:10,damage:120,mag:3,blast:3,arc:true,thrown:true},
+ launcher:{name:'Grenade launcher',short:'Launcher',cost:6,range:22,damage:140,mag:1,blast:3,arc:true},
+ rpg:{name:'RPG',short:'RPG',cost:7,range:40,damage:220,mag:1,blast:4},
  flamethrower:{name:'Backpack flamethrower',short:'Flamer',cost:6,range:3,damage:180,mag:4,incendiary:true}
 };
 export const AIM_ZONES={head:{label:'Head',accuracy:-25,damage:1.5},weapon:{label:'Weapon',accuracy:-15,damage:.75},torso:{label:'Torso',accuracy:0,damage:1},legs:{label:'Legs',accuracy:-10,damage:.85}};
@@ -46,6 +50,7 @@ export function createGame(seed=1947,definition=factoryMap(),detect=true,difficu
  const names=['Boris','Lev','Grigori','Oleg','Pavel','Igor','Anton','Vadim','Yuri','Sasha','Pyotr','Nikolai'];
  definition.guards.forEach((g,i)=>{add('guard',names[i]||`Guard ${i+1}`,g.species,g.x,g.y,g.weapon,levelOf(g));if(g.outfit)s.units.at(-1).outfit=g.outfit;});
  for(const u of s.units){initInventory(u,WEAPONS);if(u.team==='squad'){initProgression(u);initPersonality(u);}}s.loot=definition.starts.map((p,i)=>({...p,items:[{type:'ammo',kind:i%2?'rifle':'pistol',count:i%2?5:8}]}));
+ if(definition.name==='Factory test')for(const [i,kind]of ['grenade','launcher','rpg'].entries())s.loot[i+1].items.push({type:'weapon',kind,rounds:WEAPONS[kind].mag},{type:'ammo',kind,count:kind==='grenade'?6:3});
  if(definition.name==='Factory test')s.loot[0].items.push({type:'weapon',kind:'flamethrower',rounds:4},{type:'ammo',kind:'flamethrower',count:4});
  if(detect)refresh(s);log(s,`Local map ready / ${definition.guards.length} guards.`);return s;
 }
@@ -126,6 +131,7 @@ export function coverAgainst(s,a,b){
 const retaliationToken=Symbol('retaliation');
 export function previewAttack(s,a,b,burst=false,zone='torso',token=null){
  if(!a||!b||!alive(a)||!alive(b)||a.team===b.team&&token!==retaliationToken)return {ok:false,reason:'Choose a living opponent'};
+ if(WEAPONS[a.weapon].blast)return explosivePreview(s,a,b,WEAPONS[a.weapon]);
  if(!Object.hasOwn(AIM_ZONES,zone))return {ok:false,reason:'Choose an aim location'};
  const aim=AIM_ZONES[zone];
  const w=WEAPONS[a.weapon],rounds=burst&&a.weapon==='assault'?3:1,cost=w.cost+(rounds===3?2:0),melee=w.mag===0,range=melee?distance(a,b):Math.hypot(a.x-b.x,a.y-b.y);
@@ -186,7 +192,7 @@ export function attack(s,a,b,burst=false,byAI=false,zone='torso',reaction=false)
  if(reaction?!(s.phase==='enemy'&&a?.team==='squad'&&alive(a)&&!a.burningTurns&&a.overwatch?.weapon===a.weapon&&a.overwatch.heading===a.heading&&!burst&&zone==='torso'&&canSee(s,a,b)):byAI?!(s.phase==='enemy'&&a?.team==='guard'&&alive(a)&&!a.burningTurns):!canControl(s,a))return false;
  const p=previewAttack(s,reaction?{...a,ap:WEAPONS[a.weapon].cost}:a,b,burst,zone);if(!p.ok)return false;a.overwatch=null;
  if(b.team==='guard'){b.alert=true;b.lastKnown={x:a.x,y:a.y,z:levelOf(a)};}if(s.phase==='explore'){b.alert=true;refresh(s);} // Opening attacks always spend combat AP.
- if(!reaction)a.ap-=p.cost;
+ if(!reaction&&!(b.ground&&['explore','won'].includes(s.phase)))a.ap-=p.cost;
  const trajectories=[],explosions=[],sequence=[];
  // A stack suspends the current burst while a reply resolves; ammunition bounds chains.
  const frames=[{a,b,p,zone,left:p.rounds,weapon:a.weapon,aim:{...b},reply:false}];
@@ -195,30 +201,37 @@ export function attack(s,a,b,burst=false,byAI=false,zone='torso',reaction=false)
   if(!f.left||!alive(shooter)||shooter.burningTurns||w.mag&&shooter.ammo[f.weapon]<1){frames.pop();continue;}
   f.left--;shooter.overwatch=null;shooter.heading=headingTo(shooter,f.aim);shooter.facing=(f.aim.x-shooter.x)-(f.aim.y-shooter.y)>=0?1:-1;
   emitNoise(s,shooter,w.mag?30:2);if(w.mag)shooter.ammo[f.weapon]--;
-  const accurate=random(s)*100<f.p.chance,ballistic=w.mag&&!w.incendiary;
-  const shot=ballistic?bulletTrajectory(s,shooter,f.aim,{accurate,zone:f.zone,chance:f.p.chance,burst:f.p.rounds>1,reach:w.range*1.5},()=>random(s)):null;
+  const accurate=w.blast?false:random(s)*100<f.p.chance,ballistic=w.mag&&!w.incendiary;
+  const shot=w.blast?explosiveTrajectory(s,shooter,f.aim,w,f.p,()=>random(s)):ballistic?bulletTrajectory(s,shooter,f.aim,{accurate,zone:f.zone,chance:f.p.chance,burst:f.p.rounds>1,reach:w.range*1.5},()=>random(s)):null;
   if(shot)trajectories.push(shot);
   const victim=ballistic?s.units.find(u=>u.id===shot.unitId):accurate&&alive(target)?target:null;
   const event={ax:shooter.x,ay:shooter.y,bx:f.aim.x,by:f.aim.y,az:levelOf(shooter),bz:levelOf(f.aim),hit:!!victim,incendiary:!!w.incendiary,trajectories:shot?[shot]:[],explosions:[],reply:f.reply};sequence.push(event);
-  if(!victim){log(s,`${shooter.name} → ${target.name}: miss${f.reply?' / retaliation':''}.`);continue;}
-  const hitZone=shot?.zone||f.zone,amount=Math.round(Math.round(w.damage*AIM_ZONES[hitZone].damage)*(shooter.team==='guard'&&!w.incendiary?.65:1));
+  const blastResult=w.blast?detonate(s,shot,w):null;
+  if(blastResult){event.explosions.push(blastResult.blast);explosions.push(blastResult.blast);event.hit=blastResult.hits.length>0;log(s,`${shooter.name}: ${w.short} detonated / ${blastResult.blast.destroyed} structures destroyed.`);}
+  if(!victim&&!blastResult){log(s,`${shooter.name} → ${target.name}: miss${f.reply?' / retaliation':''}.`);continue;}
+  const impacts=blastResult?blastResult.hits:[{unit:victim,damage:Math.round(Math.round(w.damage*AIM_ZONES[shot?.zone||f.zone].damage)*(shooter.team==='guard'&&!w.incendiary?.65:1))}];
+  for(const {unit:victim,damage:amount}of impacts){
+  const hitZone=w.blast?'torso':shot?.zone||f.zone;
   if(victim.team==='guard'){victim.alert=true;victim.lastKnown={x:shooter.x,y:shooter.y,z:levelOf(shooter)};}
   const tankChance=w.mag?tankExplosionChance(victim,hitZone):0;
   if(tankChance>0&&random(s)<tankChance){const blast=explodeTanks(s,victim,shooter);explosions.push(blast);event.explosions.push(blast);}
   else {combatDamage(s,victim,amount,!!w.incendiary||incapacitated(victim),shooter);if(w.incendiary)ignite(s,victim);}
   const friendly=victim.team===shooter.team;
   log(s,`${shooter.name} → ${victim.name}: ${amount} damage${friendly?' / friendly fire':''}${f.reply?' / retaliation':''}${!alive(victim)?' / down':''}.`);
-  if(friendly&&victim.team==='squad'&&alive(victim)){
+  if(friendly&&victim!==shooter&&victim.team==='squad'&&alive(victim)){
    const armed=WEAPONS[victim.weapon].mag>0,turned={...victim,heading:headingTo(victim,shooter),ap:WEAPONS[victim.weapon].cost};
    const reply=armed&&alive(shooter)?previewAttack(s,turned,shooter,false,'torso',retaliationToken):{ok:false};
    const response=friendlyReaction(s,victim,shooter,amount,reply.ok);
    if(response){event.dialogue=`${response.speaker}: “${response.line}”`;log(s,event.dialogue);if(response.retaliate){frames.push({a:victim,b:shooter,p:reply,zone:'torso',left:1,weapon:victim.weapon,aim:{...shooter},reply:true});}}
   }
  }
+ }
  s.effect={...sequence[0],trajectories,explosions,explosion:explosions.at(-1),sequence};
  refresh(s);if(byAI)resolveOverwatch(s,a);return true;
 }
 
+export function groundTarget(point){return {...point,id:'ground',name:'Terrain',team:'terrain',hp:1,ground:true,weapon:'hands'};}
+export function attackGround(s,u,point){if(!WEAPONS[u?.weapon]?.blast)return false;return attack(s,u,groundTarget(point));}
 export function equip(s,u,id,slot=1){if(!canControl(s,u)||s.queue.length||!WEAPONS[id]||u.weapon===id||!(id==='hands'||u.pack.some(i=>i.type==='weapon'&&i.kind===id)))return false;const stored=id!=='hands'&&!u.slots.includes(id),cost=stored?3:0;if(s.phase==='player'&&u.ap<cost)return false;const slots=[...u.slots];if(stored)slots[slot===0?0:1]=id;const layout=gridLayout({...u,slots});if(!layout.ok)return false;if(s.phase==='player')u.ap-=cost;u.slots=slots;storeLayout(u,layout);u.weapon=id;if(id==='flamethrower')delete u.tanksExploded;u.overwatch=null;log(s,u.name+' equipped '+WEAPONS[id].name+'.');return true;}
 export function equipCutters(s,u,slot){
  if(!canControl(s,u)||s.queue.length||!u.wireCutters||![0,1].includes(slot)||u.slots.includes('wireCutters'))return false;

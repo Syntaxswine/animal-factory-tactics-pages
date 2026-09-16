@@ -2,7 +2,7 @@ import {characterArt,ARMED_WEAPONS,CHARACTER_STANCES} from "./character-art.js";
 export const RED_HAT_SPECIES=["horse","goat","donkey","sheep","cow","hen","skunk","pig-foreman"];
 export function unitArt(unit,pose='idle'){
  const stance=unit.stance||'standing';
- if(unit.weapon==='flamethrower')return {...unitArt({...unit,weapon:'hands'},'idle'),overlay:'flamethrower'};
+ if(['flamethrower','grenade','launcher','rpg'].includes(unit.weapon))return {...unitArt({...unit,weapon:'hands'},'idle'),overlay:unit.weapon};
  return (unit.outfit==='red-hats'?redHatArt(unit.species,unit.weapon||'hands',stance):null)||characterArt(unit.species,unit.weapon||'hands',pose,stance);
 }
 export {ARMED_WEAPONS,CHARACTER_STANCES};
