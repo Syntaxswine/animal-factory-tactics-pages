@@ -7,7 +7,7 @@ import {unitArt} from './red-hats-art.js';
 import {PROPS,propCells} from './environment.js';
 import {environmentRenderer} from './environment-renderer.js';
 import {bounds,inView,focusSector,sectorOverview} from './view.js';
-import {createWorld,currentMap,travel,travelReason,locationDistance,factoryIncome,liberated,incomePerJourney} from './world.js';
+import {createWorld,currentMap,travel,travelReason,locationDistance,factoryIncome,liberated,incomePerHour,clockLabel,tickWorld,spendTime,downtimeReason} from './world.js';
 import {parseMap,blockedEdge,levelOf,roofTop,neighbors} from './maps.js';
 import {edgeCells,edgePoints} from './maps.js';
 import {W,H,WEAPONS,arrangeInventory,stowWeapon,equipCutters,allocateSkill,setSneaking,setOverwatch,stepInvestigation,inventoryTransfer,turnTo,AIM_ZONES,moveGroup,key,alive,incapacitated,medicalCost,stabilizePreview,stabilize,cutPreview,cutFence,squad,guards,occupant,tile,walkable,createGame,STANCES,stanceOf,setStance,movementNeighbors,navigationPath,pathCost,pathTo,move,stepMovement,previewAttack,attack,equip,reload,endTurn,stepEnemy,canControl} from './engine.js';
@@ -18,6 +18,7 @@ let ctx=mainCtx,renderLevel=0;const compositeLayers=layerCompositor();
 let showCone=false,bagSelection=null;
 let selectedIds=new Set([0]),aimZone='torso',shotConfirmation=null;
 let viewLevel=0,routeCache=null;
+let lastClockFrame=null;
 let world=createWorld(customMap),s=currentMap(world),targetId=null,burst=false,showGrid=false,hover=null,hoverActor=null,route=null,lastTick=0,lastRevision=-1,toast='',toastUntil=0,effectUntil=0,lastEffect=null,drag=null,width=1,height=1;
 const camera={x:0,y:0,zoom:1.15},images=new Map(),sprites=[];
 const art=environmentRenderer(()=>{},id=>message('Could not load '+id+' artwork.'));
@@ -103,7 +104,7 @@ function updateHover(){
  route=null;if(camera.zoom<.2){$('hint').textContent='240 × 240 tiles · Double-click a sector to inspect it.';return;}if(!hover)return;const u=selected();if(hoverActor!==null&&s.units[hoverActor]?.team==='guard'){const t=s.units[hoverActor],p=previewAttack(s,u,t,burst,aimZone);$('hint').textContent=`${t.name} / ${WEAPONS[t.weapon].short} / ${t.hp} HP · ${p.ok?`${p.chance}% · ${p.cost} AP${p.cover?' · COVER':''}`:p.reason} · ${AIM_ZONES[aimZone].label} · ${shotConfirmation===shotKey(t)?'Click again to fire':'Click to select enemy'}`;return;}
  const routeKey=[s.revision,u.id,u.x,u.y,u.z,hover.x,hover.y,viewLevel].join(':');if(routeCache?.state===s&&routeCache.key===routeKey)route=routeCache.path;else{route=navigationPath(s,u,hover.x,hover.y,viewLevel);routeCache={state:s,key:routeKey,path:route};}$('hint').textContent=route?.length?`${hover.x}, ${hover.y} · ${route.length} tiles${s.phase==='player'?` / ${pathCost(route)} AP${pathCost(route)>u.ap?' · will stop when AP is spent':''}`:' / explore and replan'} · Click to move`:'No route through discovered terrain, or already at destination.';
 }
-function sync(){ $('sight-info').textContent=(selected().cone??120)+'° cone · 75 tile landscape / 60 tile detection maximum';$('turn').disabled=!canControl(s,selected())||!!s.queue.length;selectedIds=new Set([...selectedIds].filter(id=>alive(s.units[id])));selectedIds.add(s.selected);
+function sync(){ syncClock(); $('sight-info').textContent=(selected().cone??120)+'° cone · 75 tile landscape / 60 tile detection maximum';$('turn').disabled=!canControl(s,selected())||!!s.queue.length;selectedIds=new Set([...selectedIds].filter(id=>alive(s.units[id])));selectedIds.add(s.selected);
  $('level').value=viewLevel;const stairs=movementNeighbors(s,selected()).filter(p=>p.z!==levelOf(selected()));for(const [id,delta]of [['up',1],['down',-1]]){const link=stairs.find(p=>p.z===levelOf(selected())+delta);$(id).disabled=!canControl(s,selected())||s.queue.length>0||!link||(s.phase==='player'&&selected().ap<link.cost);$(id).textContent=(link?.kind==='roof'?'Roof':link?.cost===3?'Ladder':link?'Stairs':'Climb')+(delta===1?' ↑':' ↓')+(link?' · '+link.cost+' AP':'');}
  $('local-name').textContent=s.definition.name;$('recon-name').textContent=s.definition.name;document.title='Red Shift — '+s.definition.name;
  const u=selected(),w=WEAPONS[u.weapon],t=target(),p=t?previewAttack(s,u,t,burst,aimZone):null,control=canControl(s,u)&&!s.queue.length;
@@ -133,7 +134,7 @@ function select(id,toggle=false){if(!alive(s.units[id]))return;if(toggle){if(sel
 function shotKey(t){const u=selected();return [u.id,t.id,aimZone,burst,s.round,s.phase,s.revision,u.x,u.y,u.z,u.weapon,u.ap,t.x,t.y,t.z,t.hp].join(':');}
 function chooseEnemy(id){const t=s.units[id];if(!t||!alive(t)||!s.detected.has(id))return;if(targetId===id&&shotConfirmation===shotKey(t)){tryAttack();return;}targetId=id;shotConfirmation=shotKey(t);sync();updateHover();}
 function tryAttack(){const t=target();shotConfirmation=null;if(t&&attack(s,selected(),t,burst,false,aimZone))sync();else message('Attack unavailable. Check range, AP and ammunition.');}
-function restart(){selectedIds=new Set([0]);shotConfirmation=null;aimZone='torso';$('aim-zone').value=aimZone;world=createWorld(customMap,$('difficulty').value);s=currentMap(world);targetId=null;burst=false;hover=null;route=null;lastEffect=null;camera.zoom=1.15;center();sync();}
+function restart(){lastClockFrame=null;selectedIds=new Set([0]);shotConfirmation=null;aimZone='torso';$('aim-zone').value=aimZone;world=createWorld(customMap,$('difficulty').value);s=currentMap(world);targetId=null;burst=false;hover=null;route=null;lastEffect=null;camera.zoom=1.15;center();sync();}
 function zoom(factor){const cx=width/2,cy=height/2,z=camera.zoom,next=Math.max(.025,Math.min(2.3,z*factor));camera.x=cx+(camera.x-cx)*next/z;camera.y=cy+(camera.y-cy)*next/z;camera.zoom=next;}
 $('squad').addEventListener('click',e=>{const b=e.target.closest('[data-unit]');if(b)select(Number(b.dataset.unit),e.shiftKey);});
 $('weapons').addEventListener('click',e=>{const b=e.target.closest('[data-weapon]');if(b&&equip(s,selected(),b.dataset.weapon)){burst=false;sync();}});
@@ -154,21 +155,24 @@ $('sector').onclick=sector;$('level').onchange=()=>{viewLevel=Number($('level').
 for(const [id,delta]of [['up',1],['down',-1]])$(id).onclick=()=>{const u=selected(),link=movementNeighbors(s,u).find(p=>p.z===levelOf(u)+delta);if(!link||!move(s,u,link.x,link.y,link.z))message('Stand at stairs, a ladder or a marked roof climb while standing with enough AP.');sync();};
 canvas.addEventListener('dblclick',e=>{if(camera.zoom>=.2)return;const r=canvas.getBoundingClientRect(),p=pick(e.clientX-r.left,e.clientY-r.top);if(p.x<0||p.y<0||p.x>=W||p.y>=H)return;$('sector-x').value=Math.floor(p.x/24)+1;$('sector-y').value=Math.floor(p.y/24)+1;sector();});
 $('mini').onclick=e=>{const r=$('mini').getBoundingClientRect();$('sector-x').value=Math.min(10,Math.floor((e.clientX-r.left)/r.width*10)+1);$('sector-y').value=Math.min(10,Math.floor((e.clientY-r.top)/r.height*10)+1);sector();};
-function frame(now){if(!document.querySelector('dialog[open]')&&now-lastTick>(s.phase==='enemy'?110:130)){lastTick=now;if(s.phase==='enemy')stepEnemy(s);else if(s.queue.length){const before=levelOf(selected());stepMovement(s);if(levelOf(selected())!==before){viewLevel=levelOf(selected());$('level').value=viewLevel;}}if(s.phase!=='enemy')stepInvestigation(s);if(s.revision!==lastRevision)sync();}draw(now);requestAnimationFrame(frame);}resize();sync();requestAnimationFrame(frame);
+function frame(now){const elapsed=lastClockFrame===null?0:now-lastClockFrame;lastClockFrame=now;tickWorld(world,elapsed,{paused:document.hidden||$('manual').open});syncClock();if(!document.querySelector('dialog[open]')&&now-lastTick>(s.phase==='enemy'?110:130)){lastTick=now;if(s.phase==='enemy')stepEnemy(s);else if(s.queue.length){const before=levelOf(selected());stepMovement(s);if(levelOf(selected())!==before){viewLevel=levelOf(selected());$('level').value=viewLevel;}}if(s.phase!=='enemy')stepInvestigation(s);if(s.revision!==lastRevision)sync();}draw(now);requestAnimationFrame(frame);}resize();sync();requestAnimationFrame(frame);
 
+function syncClock(){const clock=clockLabel(world);if($('campaign-clock').textContent!==clock)$('campaign-clock').textContent=clock;const summary=`${clock} · Treasury $${world.money.toLocaleString()} · +$${incomePerHour(world).toLocaleString()} / hour`;if($('economy-summary').textContent!==summary)$('economy-summary').textContent=summary;}
+document.addEventListener('visibilitychange',()=>{lastClockFrame=null;});
+$('manual').addEventListener('close',()=>{lastClockFrame=null;});
 function showOvermap(){
- $('economy-summary').textContent=`Treasury $${world.money.toLocaleString()} · +$${incomePerJourney(world).toLocaleString()} per journey · ${world.journeys} journeys completed`;
+ syncClock();renderDowntime();
  $('route-label').textContent=Object.values(world.definitions).map(d=>d.name).join(' ↔ ');const container=$('locations');container.replaceChildren();
  for(const [id,definition]of Object.entries(world.definitions)){
   const card=document.createElement('button');card.className='location';card.dataset.location=id;
   const name=document.createElement('strong');name.textContent=definition.name;card.append(name);
   const detail=document.createElement('span');const visited=world.states[id];detail.textContent=id===world.current?'Current location':visited?(guards(visited).length?'Visited · guards remain':'Cleared · terrain remembered'):'Unvisited local map';card.append(detail);
-  const production=document.createElement('span'),rate=factoryIncome(world,id);production.textContent=rate?`${liberated(world,id)?'Liberated':'Not liberated'} factory · ${locationDistance(world,id)} steps from start · ${liberated(world,id)?'Produces':'Potential'} $${rate} / journey`:'Freight yard · No factory income';card.append(production);
-  const reason=travelReason(world,id);card.disabled=!!reason;card.title=reason||'Travel to this local map';
+  const production=document.createElement('span'),rate=factoryIncome(world,id);production.textContent=rate?`${liberated(world,id)?'Liberated':'Not liberated'} factory · ${locationDistance(world,id)} steps from start · ${liberated(world,id)?'Produces':'Potential'} $${rate} / hour`:'Freight yard · No factory income';card.append(production);
+  const reason=travelReason(world,id);card.disabled=!!reason;card.title=reason||'Travel to this local map · 1 hour';
   card.onclick=()=>{const result=travel(world,id);if(!result.ok){$('travel-info').textContent=result.error;return;}s=result.state;selectedIds=new Set([s.selected]);shotConfirmation=null;aimZone='torso';$('aim-zone').value=aimZone;targetId=null;hover=null;hoverActor=null;route=null;lastEffect=null;center();$('overmap').close();sync();};container.append(card);
  }
- const activeMap=currentMap(world),exit=activeMap.definition.exits[0];$('travel-info').textContent=`Travel marker: ${exit.x}, ${exit.y}, level ${levelOf(exit)+1}. Gather every living member within 2 tiles. Travel is unavailable during combat.`;
- $('overmap').showModal();
+ const activeMap=currentMap(world),exit=activeMap.definition.exits[0];$('travel-info').textContent=`Travel marker: ${exit.x}, ${exit.y}, level ${levelOf(exit)+1}. Gather every living member within 2 tiles. Travel takes 1 hour and is unavailable during combat.`;
+ if(!$('overmap').open)$('overmap').showModal();
 }
 $('world').onclick=showOvermap;$('world-close').onclick=()=>$('overmap').close();
 if(loadError)message(loadError);
@@ -186,3 +190,7 @@ function renderInventory(){const u=selected(),box=$('inventory'),layout=gridLayo
 $('sneak').onclick=()=>{setSneaking(s,selected());shotConfirmation=null;sync();};$('watch').onclick=()=>{setOverwatch(s,selected());shotConfirmation=null;sync();};
 
 function renderSheet(){const u=selected(),box=$('sheet');$('sheet-summary').textContent='Character sheet · Level '+u.level+' · '+u.skillPoints+' points';box.replaceChildren();const text=document.createElement('p');text.textContent='Level '+u.level+' · '+u.xp+' XP · '+u.skillPoints+' points available. '+u.maxHp+' HP / '+u.maxAp+' AP / '+u.accuracy+' accuracy. '+(SPECIES_TRAITS[u.species]?.label||'');box.append(text);for(const [id,k] of Object.entries(SKILLS)){const b=document.createElement('button');b.textContent=k.label+' '+u.skills[id]+' · '+k.effect;b.disabled=!['explore','won'].includes(s.phase)||u.skillPoints<1||u.skills[id]>=20||id==='medical'&&u.medical>=100||id==='stealth'&&u.stealth>=100;b.onclick=()=>{if(!allocateSkill(s,u,id))message('Training unavailable.');sync();};box.append(b);}}
+
+function renderDowntime(){const reason=downtimeReason(world),hours=Number($('downtime-hours').value);$('downtime-info').textContent=reason||`Rest: recover up to ${hours*10}% maximum HP and refill AP. Train: +${hours*25} XP per troop below level 10. Factory production continues.`;for(const id of ['rest-squad','train-squad']){$(id).disabled=!!reason;$(id).title=reason;}if(!reason&&squad(s).every(u=>u.level>=10)){$('train-squad').disabled=true;$('train-squad').title='All troops have reached level 10.';}$('downtime-roster').textContent=s.units.filter(u=>u.team==='squad').map(u=>`${u.name}: ${u.hp}/${u.maxHp} HP · Level ${u.level} · ${u.xp} XP · ${u.skillPoints} skill points${u.casualty?' · '+u.casualty:''}`).join('\n');}
+$('downtime-hours').onchange=renderDowntime;
+for(const [id,activity]of [['rest-squad','rest'],['train-squad','train']])$(id).onclick=()=>{const result=spendTime(world,activity,Number($('downtime-hours').value));lastClockFrame=null;$('downtime-result').textContent=result.ok?result.message+` Factory income +$${result.income}.`:result.error;sync();renderDowntime();};
