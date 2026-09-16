@@ -2,7 +2,7 @@ import {WEAPON_EXPANSION_FRAMES} from './weapon-expansion-frames.js';
 
 export const EXPANSION_WEAPON_LABELS={
  shotgun:'Pump-action shotgun',smg:'PPSh submachine gun',sniper:'Sniper rifle',
- hmg:'Heavy machine gun','grenade-launcher':'Grenade launcher',rpg:'RPG',grenade:'Hand grenade',
+ hmg:'Heavy machine gun','grenade-launcher':'Grenade launcher',rpg:'RPG',grenade:'Hand grenade',flamethrower:'Flamethrower',
 };
 export const EXPANSION_WEAPONS=Object.keys(EXPANSION_WEAPON_LABELS);
 const key=(outfit,species,weapon,stance)=>`${outfit}/${species}/${weapon}/${stance}`;
