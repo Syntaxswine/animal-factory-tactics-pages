@@ -13,10 +13,12 @@ export {W,H} from './maps.js';
 export const WEAPONS={
  hands:{name:'Workers’ fists',short:'Hands',cost:3,range:1,damage:16,mag:0},
  knife:{name:'NR-40 knife',short:'NR-40',cost:3,range:1,damage:27,mag:0},
- pistol:{name:'TT-33 pistol',short:'TT-33',cost:4,range:12,damage:27,mag:8,accuracy:-20,rangeLoss:35},
+ pistol:{name:'TT-33 pistol',short:'TT-33',cost:4,range:12,damage:27,mag:8,penetrationClass:'pistol',accuracy:-20,rangeLoss:35},
  rifle:{name:'Mosin-Nagant',short:'Mosin',cost:6,range:24,damage:48,mag:5,accuracy:5,rangeLoss:18},
- assault:{name:'AK-47',short:'AK-47',cost:4,range:20,damage:26,mag:30,rangeLoss:26},
- shotgun:{name:'Pump-action shotgun',short:'Shotgun',cost:5,range:12,damage:12,mag:6,pellets:6,rangeLoss:15},
+ assault:{name:'AK-47',short:'AK-47',cost:4,range:24,damage:26,mag:30,burstRounds:3,rangeLoss:26},
+ smg:{name:'PPSh submachine gun',short:'SMG',cost:4,range:20,damage:27,mag:35,burstRounds:3,penetrationClass:'pistol',rangeLoss:30},
+ hmg:{name:'Heavy machine gun',short:'HMG',cost:6,range:28,damage:48,mag:50,burstRounds:3,rangeLoss:24},
+ shotgun:{name:'Pump-action shotgun',short:'Shotgun',cost:5,range:12,damage:27,mag:6,penetrationClass:'pistol',pellets:6,rangeLoss:15},
  sniper:{name:'Sniper rifle',short:'Sniper',cost:8,range:36,damage:75,mag:5,accuracy:10,rangeLoss:12},
  grenade:{name:'Fragmentation grenade',short:'Grenade',cost:5,range:10,damage:120,mag:3,blast:3,arc:true,thrown:true},
  launcher:{name:'Grenade launcher',short:'Launcher',cost:6,range:22,damage:140,mag:1,blast:3,arc:true},
@@ -53,7 +55,7 @@ export function createGame(seed=1947,definition=factoryMap(),detect=true,difficu
  const names=['Boris','Lev','Grigori','Oleg','Pavel','Igor','Anton','Vadim','Yuri','Sasha','Pyotr','Nikolai'];
  definition.guards.forEach((g,i)=>{add('guard',names[i]||`Guard ${i+1}`,g.species,g.x,g.y,g.weapon,levelOf(g));if(g.outfit)s.units.at(-1).outfit=g.outfit;});
  for(const u of s.units){initInventory(u,WEAPONS);if(u.team==='squad'){initProgression(u);initPersonality(u);}}s.loot=definition.starts.map((p,i)=>({...p,items:[{type:'ammo',kind:i%2?'rifle':'pistol',count:i%2?5:8}]}));
- if(definition.name==='Factory test')for(const [i,kind]of ['shotgun','sniper'].entries())s.loot[i].items.push({type:'weapon',kind,rounds:WEAPONS[kind].mag},{type:'ammo',kind,count:12});
+ if(definition.name==='Factory test')for(const [i,kind]of ['shotgun','sniper','smg','hmg'].entries())s.loot[i].items.push({type:'weapon',kind,rounds:WEAPONS[kind].mag},{type:'ammo',kind,count:12});
  if(definition.name==='Factory test')for(const [i,kind]of ['grenade','launcher','rpg'].entries())s.loot[i+1].items.push({type:'weapon',kind,rounds:WEAPONS[kind].mag},{type:'ammo',kind,count:kind==='grenade'?6:3});
  if(definition.name==='Factory test')s.loot[0].items.push({type:'weapon',kind:'flamethrower',rounds:4},{type:'ammo',kind:'flamethrower',count:4});
  if(detect)refresh(s);log(s,`Local map ready / ${definition.guards.length} guards.`);return s;
@@ -140,10 +142,10 @@ export function previewAttack(s,a,b,burst=false,zone='torso',token=null){
  if(WEAPONS[a.weapon].blast)return explosivePreview(s,a,b,WEAPONS[a.weapon]);
  if(!Object.hasOwn(AIM_ZONES,zone))return {ok:false,reason:'Choose an aim location'};
  const aim=AIM_ZONES[zone];
- const w=WEAPONS[a.weapon],rounds=burst&&a.weapon==='assault'?3:1,cost=w.cost+(rounds===3?2:0),melee=w.mag===0,range=melee?(levelOf(a)===levelOf(b)?Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y)):Infinity):Math.hypot(a.x-b.x,a.y-b.y);
+ const w=WEAPONS[a.weapon],rounds=burst?(w.burstRounds||1):1,cost=w.cost+(rounds>1?2:0),melee=w.mag===0,range=melee?(levelOf(a)===levelOf(b)?Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y)):Infinity):Math.hypot(a.x-b.x,a.y-b.y);
  const visible=token!==retaliationToken&&a.team==='squad'?squad(s).some(p=>canSee(s,p,b)):canSee(s,a,b);
  const cover=!melee&&coverAgainst(s,a,b),heightCover=!melee&&levelOf(b)>levelOf(a)&&(a.x!==b.x||a.y!==b.y),coverPenalty=cover?25:heightCover?15:0,rangePenalty=melee?0:Math.max(0,levelOf(b)-levelOf(a)),effectiveRange=Math.max(0,w.range-rangePenalty);
- const chance=Math.max(10,Math.min(95,a.accuracy+(melee?10:0)+(w.accuracy||0)+aim.accuracy-(melee?0:Math.max(0,range+rangePenalty-3)/Math.max(1,w.range-3)*(w.rangeLoss??25))-coverPenalty-(rounds===3?10:0)));
+ const chance=Math.max(10,Math.min(95,a.accuracy+(melee?10:0)+(w.accuracy||0)+aim.accuracy-(melee?0:Math.max(0,range+rangePenalty-3)/Math.max(1,w.range-3)*(w.rangeLoss??25))-coverPenalty-(rounds>1?10:0)));
  let reason='';
  if(a.burningTurns>0)reason='On fire: running in panic';else if(melee&&zone!=='torso')reason='Aimed shots require a firearm';else if(!visible)reason='Target not visible';else if(!inCone(a,b))reason='Outside personal sight cone';else if(range>effectiveRange)reason='Out of range';else if(!lineOfSight(s,a,b))reason='Line of fire blocked';else if(!canSee(s,a,b))reason='Not identified: face the target';else if(!melee&&!zoneVisible(s,a,b,zone))reason=AIM_ZONES[zone].label+' hidden by cover';else if(w.mag&&a.ammo[a.weapon]<rounds)reason='Reload required';else if(!['explore','won'].includes(s.phase)&&a.ap<cost)reason='Not enough AP';
  let obstruction=null;
