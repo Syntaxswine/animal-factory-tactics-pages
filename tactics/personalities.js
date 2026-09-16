@@ -7,12 +7,12 @@ export const PERSONALITIES={
 };
 const clamp=(v,min=0,max=100)=>Math.max(min,Math.min(max,v));
 export const personality=u=>PERSONALITIES[u.personalityId];
-export function initPersonality(u){if(!PERSONALITIES[u.name])return;u.personalityId=u.name;u.social={stress:0,bonds:{...personality(u).bonds},incidents:{},memories:[],voice:0};}
+export function initPersonality(u){if(!PERSONALITIES[u.name])return;u.personalityId=u.name;u.social={stress:0,fatigue:0,bonds:{...personality(u).bonds},incidents:{},memories:[],voice:0};}
 function remember(u,text){u.social.memories.unshift(text);u.social.memories.length=Math.min(8,u.social.memories.length);}
 export function retaliationChance(u,attacker,damage){const p=personality(u),m=u.social;if(!p||!m)return 0;const incident=m.incidents[attacker.name];return clamp(p.aggression*.0035+p.pride*.0015-p.discipline*.003-p.forgiveness*.002-p.loyalty*.001+(damage/u.maxHp)*.5+m.stress*.003+(incident?.grudge||0)*.004+Math.min(4,Math.max(0,(incident?.hits||0)-1))*.07-(m.bonds[attacker.name]||0)*.003,0,.95);}
 export function friendlyReaction(s,u,attacker,damage,canShoot){
  const p=personality(u),m=u.social;if(!p||!m)return null;
- const incident=m.incidents[attacker.name]||={hits:0,damage:0,grudge:0};incident.hits++;incident.damage+=damage;incident.grudge=clamp(incident.grudge+8+(100-p.forgiveness)*.12);m.stress=clamp(m.stress+10+damage/u.maxHp*35);m.bonds[attacker.name]=clamp((m.bonds[attacker.name]||0)-8-damage/u.maxHp*20,-100,100);
+ const incident=m.incidents[attacker.name]||={hits:0,damage:0,grudge:0};incident.hits++;incident.damage+=damage;incident.grudge=clamp(incident.grudge+8+(100-p.forgiveness)*.12);m.stress=clamp(m.stress+10);m.bonds[attacker.name]=clamp((m.bonds[attacker.name]||0)-8-damage/u.maxHp*20,-100,100);
  remember(u,`${attacker.name} hit me for ${damage} damage (incident ${incident.hits}).`);
  s.socialSeed=(Math.imul(s.socialSeed??(s.seed^0x9e3779b9),1664525)+1013904223)>>>0;
  const retaliate=canShoot&&s.socialSeed/4294967296<retaliationChance(u,attacker,damage);
@@ -21,5 +21,9 @@ export function friendlyReaction(s,u,attacker,damage,canShoot){
  return {speaker:u.name,line,retaliate};
 }
 export function helped(patient,medic){if(!patient.social)return null;patient.social.bonds[medic.name]=clamp((patient.social.bonds[medic.name]||0)+20,-100,100);patient.social.stress=clamp(patient.social.stress-20);remember(patient,`${medic.name} stopped my bleeding.`);return personality(patient)?.thanks;}
+// Injury uses actual HP lost, so overkill cannot inflate either meter.
+export function injuryStrain(u,hpLost){if(!u.social||hpLost<=0)return;const fraction=hpLost/u.maxHp;u.social.stress=clamp(u.social.stress+10+fraction*35);u.social.fatigue=clamp((u.social.fatigue||0)+5+fraction*25);}
+export function killRelief(killer,victim){if(killer?.social&&killer.hp>0&&killer.team!==victim.team)settleStress(killer,15);}
+export function restStrain(u,hours){if(!u.social)return;settleStress(u,hours*5);u.social.fatigue=clamp((u.social.fatigue||0)-hours*10);}
 export function settleStress(u,amount){if(u.social)u.social.stress=clamp(u.social.stress-amount);}
-export function personalityDescription(u){const p=personality(u);if(!p||!u.social)return [];return [p.background,p.motivation,p.temperament,`Stress: ${Math.round(u.social.stress)}/100.`,...Object.entries(u.social.bonds).map(([name,bond])=>`${name}: ${bond>=25?'trusted':bond>=0?'cautious trust':bond>-35?'strained':'resented'} (${Math.round(bond)}).`),...u.social.memories];}
+export function personalityDescription(u){const p=personality(u);if(!p||!u.social)return [];return [p.background,p.motivation,p.temperament,`Stress: ${Math.round(u.social.stress)}/100 · Fatigue: ${Math.round(u.social.fatigue||0)}/100.`,...Object.entries(u.social.bonds).map(([name,bond])=>`${name}: ${bond>=25?'trusted':bond>=0?'cautious trust':bond>-35?'strained':'resented'} (${Math.round(bond)}).`),...u.social.memories];}

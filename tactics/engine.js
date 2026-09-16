@@ -1,4 +1,4 @@
-import {initPersonality,friendlyReaction,helped,settleStress} from './personalities.js';
+import {initPersonality,friendlyReaction,helped,settleStress,injuryStrain,killRelief} from './personalities.js';
 import {initProgression,awardCombatXP,train} from './progression.js';
 import {bulletTrajectory} from './projectiles.js';
 import {gridLayout,storeLayout,placeItem,initInventory,reserve,consumeAmmo,syncWeapons,accepts,receive} from './inventory.js';
@@ -139,9 +139,10 @@ export function previewAttack(s,a,b,burst=false,zone='torso',token=null){
  return {ok:!reason,reason,cost,rounds,chance:Math.round(chance),cover,heightCover,coverPenalty,rangePenalty,damage:Math.round(w.damage*aim.damage),zone,range:effectiveRange,tankChance:melee?0:tankExplosionChance(b,zone),obstruction};
 }
 function random(s){s.seed=(Math.imul(s.seed,1664525)+1013904223)>>>0;return s.seed/4294967296;}
-function combatDamage(s,u,damage,fatal=false){
- const living=alive(u);u.hp=Math.max(0,u.hp-damage);
+function combatDamage(s,u,damage,fatal=false,source=null){
+ const living=alive(u),before=u.hp;u.hp=Math.max(0,u.hp-damage);injuryStrain(u,before-u.hp);
  if(u.hp>0)return;
+ if(living)killRelief(source,u);
  if(u.team==='guard'&&living&&!u.lootDropped){delete s.contacts[u.id];awardCombatXP(s);syncWeapons(u);s.loot.push({x:u.x,y:u.y,z:levelOf(u),items:u.pack});u.pack=[];u.lootDropped=true;}
  if(u.team==='squad'&&(living||fatal&&incapacitated(u))){u.casualty=fatal?'dead':s.difficulty==='easy'?'stable':'bleeding';u.bleedTurns=u.casualty==='bleeding'?6:0;u.ap=0;u.overwatch=null;s.queue=[];}
 }
@@ -168,14 +169,14 @@ function finishFireRound(s){
  for(const u of s.units)if(u.burningTurns>0&&u.fireActedRound===s.round){u.burningTurns--;if(!u.burningTurns)log(s,u.name+' is no longer on fire.');}
  s.fires=(s.fires||[]).map(p=>({...p,turns:p.turns-1})).filter(p=>p.turns>0);
 }
-function explodeTanks(s,wearer){
+function explodeTanks(s,wearer,source=null){
  wearer.tanksExploded=true;wearer.ammo.flamethrower=0;
  wearer.pack=wearer.pack.filter(i=>i.kind!=='flamethrower');wearer.slots=wearer.slots.map(id=>id==='flamethrower'?null:id);
  if(wearer.weapon==='flamethrower')wearer.weapon='hands';wearer.overwatch=null;
  const z=levelOf(wearer);s.fires||=[];
  for(let y=wearer.y-5;y<=wearer.y+5;y++)for(let x=wearer.x-5;x<=wearer.x+5;x++)if(inBounds(x,y,z)&&Math.hypot(x-wearer.x,y-wearer.y)<=5&&!['void','water'].includes(tile(s,x,y,z))){const old=s.fires.find(p=>p.x===x&&p.y===y&&p.z===z);if(old)old.turns=3;else s.fires.push({x,y,z,turns:3});}
  const victims=s.units.filter(u=>(alive(u)||incapacitated(u))&&levelOf(u)===z&&Math.max(Math.abs(u.x-wearer.x),Math.abs(u.y-wearer.y))<=1);
- for(const u of victims)combatDamage(s,u,Math.max(u.hp,1),true);
+ for(const u of victims)combatDamage(s,u,Math.max(u.hp,1),true,source);
  for(const u of s.units)if(levelOf(u)===z&&Math.hypot(u.x-wearer.x,u.y-wearer.y)<=5)ignite(s,u);
  log(s,`${wearer.name}'s fuel tanks exploded / ${victims.length} caught in blast.`);
  return {x:wearer.x,y:wearer.y,z:levelOf(wearer)};
@@ -203,8 +204,8 @@ export function attack(s,a,b,burst=false,byAI=false,zone='torso',reaction=false)
   const hitZone=shot?.zone||f.zone,amount=Math.round(Math.round(w.damage*AIM_ZONES[hitZone].damage)*(shooter.team==='guard'&&!w.incendiary?.65:1));
   if(victim.team==='guard'){victim.alert=true;victim.lastKnown={x:shooter.x,y:shooter.y,z:levelOf(shooter)};}
   const tankChance=w.mag?tankExplosionChance(victim,hitZone):0;
-  if(tankChance>0&&random(s)<tankChance){const blast=explodeTanks(s,victim);explosions.push(blast);event.explosions.push(blast);}
-  else {combatDamage(s,victim,amount,!!w.incendiary||incapacitated(victim));if(w.incendiary)ignite(s,victim);}
+  if(tankChance>0&&random(s)<tankChance){const blast=explodeTanks(s,victim,shooter);explosions.push(blast);event.explosions.push(blast);}
+  else {combatDamage(s,victim,amount,!!w.incendiary||incapacitated(victim),shooter);if(w.incendiary)ignite(s,victim);}
   const friendly=victim.team===shooter.team;
   log(s,`${shooter.name} → ${victim.name}: ${amount} damage${friendly?' / friendly fire':''}${f.reply?' / retaliation':''}${!alive(victim)?' / down':''}.`);
   if(friendly&&victim.team==='squad'&&alive(victim)){
