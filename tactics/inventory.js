@@ -1,7 +1,7 @@
-export const WEIGHT={knife:1,pistol:1,rifle:4,assault:4};
+export const WEIGHT={knife:1,pistol:1,rifle:4,assault:4,flamethrower:12};
 export const itemWeight=i=>i.type==='weapon'?(WEIGHT[i.kind]||0):i.count*.03;
 export const loadWeight=u=>(u.pack||[]).reduce((n,i)=>n+itemWeight(i),0)+(u.medkits||0)*.5+(u.wireCutters?1:0);
-export function initInventory(u,weapons){u.capacity=GRID_W*GRID_H;u.slots=[u.weapon,u.weapon==='pistol'?'knife':'pistol'];u.pack=[...new Set(u.slots)].map(kind=>({type:'weapon',kind,rounds:weapons[kind].mag}));for(const kind of ['pistol','rifle'])u.pack.push({type:'ammo',kind,count:kind==='pistol'?16:5});if(u.team==='guard'){u.slots=[u.weapon];u.pack=u.pack.filter(i=>i.type==='weapon'&&i.kind===u.weapon||i.type==='ammo'&&i.kind===u.weapon);}}
+export function initInventory(u,weapons){u.capacity=GRID_W*GRID_H;u.slots=[u.weapon,u.weapon==='pistol'?'knife':'pistol'];u.pack=[...new Set(u.slots)].map(kind=>({type:'weapon',kind,rounds:weapons[kind].mag}));for(const kind of ['pistol','rifle'])u.pack.push({type:'ammo',kind,count:kind==='pistol'?16:5});if(u.weapon==='flamethrower')u.pack.push({type:'ammo',kind:'flamethrower',count:4});if(u.team==='guard'){u.slots=[u.weapon];u.pack=u.pack.filter(i=>i.type==='weapon'&&i.kind===u.weapon||i.type==='ammo'&&i.kind===u.weapon);}}
 export const reserve=(u,kind)=>u.pack.filter(i=>i.type==='ammo'&&i.kind===kind).reduce((n,i)=>n+i.count,0);
 export function consumeAmmo(u,kind,count){for(const i of u.pack)if(i.type==='ammo'&&i.kind===kind){const n=Math.min(count,i.count);i.count-=n;count-=n;}u.pack=u.pack.filter(i=>i.type!=='ammo'||i.count>0);}
 export function syncWeapons(u){for(const i of u.pack)if(i.type==='weapon')i.rounds=u.ammo[i.kind];}
@@ -9,7 +9,7 @@ export function accepts(u,item){if(item.type==='weapon'&&u.pack.some(i=>i.type==
 export function receive(u,item){if(item.type==='weapon'){u.ammo[item.kind]=item.rounds;u.pack.push({...item,cell:undefined});}else{const existing=u.pack.find(i=>i.type==='ammo'&&i.kind===item.kind);if(existing)existing.count+=item.count;else u.pack.push(item);}}
 
 export const GRID_W=6,GRID_H=3;
-export const itemSpan=i=>i.type==='weapon'&&['rifle','assault'].includes(i.kind)?2:1;
+export const itemSpan=i=>i.type==='weapon'&&['rifle','assault','flamethrower'].includes(i.kind)?2:1;
 export function gridEntries(u){const entries=u.pack.flatMap((item,index)=>item.type==='weapon'&&u.slots.includes(item.kind)?[]:[{key:String(index),item,span:itemSpan(item),cell:item.cell}]);if(u.medkits)entries.push({key:'medkits',item:{type:'utility',kind:'medkits',count:u.medkits},span:1,cell:u.utilityCells?.medkits});if(u.wireCutters&&!u.slots.includes('wireCutters'))entries.push({key:'wireCutters',item:{type:'utility',kind:'wireCutters'},span:1,cell:u.utilityCells?.wireCutters});return entries;}
 export function gridLayout(u){const entries=gridEntries(u),occupied=new Set(),placed=[];const fits=(cell,span)=>Number.isInteger(cell)&&cell>=0&&cell+span<=GRID_W*GRID_H&&cell%GRID_W+span<=GRID_W&&Array.from({length:span},(_,i)=>cell+i).every(c=>!occupied.has(c));const put=(e,cell)=>{for(let i=0;i<e.span;i++)occupied.add(cell+i);placed.push({...e,cell});};const pending=[];for(const e of entries)if(fits(e.cell,e.span))put(e,e.cell);else pending.push(e);for(const e of pending){const cell=Array.from({length:GRID_W*GRID_H},(_,i)=>i).find(c=>fits(c,e.span));if(cell===undefined)return {ok:false,entries:placed,occupied};put(e,cell);}return {ok:true,entries:placed,occupied};}
 export function storeLayout(u,layout=gridLayout(u)){if(!layout.ok)return false;u.utilityCells||={};for(const e of layout.entries)if(e.item.type==='utility')u.utilityCells[e.key]=e.cell;else u.pack[Number(e.key)].cell=e.cell;return true;}

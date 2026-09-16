@@ -1,3 +1,4 @@
+import {drawFlamethrower} from './flamethrower-art.js';
 import {emptyFeaturePlan,seededFeaturePlan,requiredConnections} from './feature-plan.js';
 import {layerCompositor} from './layers.js';
 import {DIRECTIONS,CONNECTION_TYPES,connectionSet} from './connections.js';
@@ -44,7 +45,7 @@ function drawLayer(){
  for(const p of m.props||[])if(levelOf(p)===renderLevel&&propCells(p).some(q=>inView(q,boundsNow)))objects.push({...p,depth:Math.max(...propCells(p).map(q=>q.x+q.y)),type:'prop'});
  (designMode==='block'?[]:m.starts).forEach((p,i)=>objects.push({...p,depth:p.x+p.y,type:'unit',species:['horse','goat','donkey','sheep'][i],label:String(i+1),color:'#f3d780'}));m.guards.forEach((p,i)=>objects.push({...p,depth:p.x+p.y,type:'unit',label:`G${i+1}`,color:'#ff9c7b'}));
  objects.sort((a,b)=>(PROPS[a.kind]?.groundLayer?0:1)-(PROPS[b.kind]?.groundLayer?0:1)||a.depth-b.depth||(a.type==='unit'?1:-1));for(const o of objects){if(o.type==='unit'&&(levelOf(o)!==renderLevel||!inView(o,boundsNow)))continue;if(o.type==='prop'){art.prop(ctx,project,camera.zoom,o);continue;}if(o.type==='edge'){edge(o.k,o.kind);continue;}const p=project(o.x,o.y);if(o.type==='crate'){if(art.prop(ctx,project,camera.zoom,{...o,kind:'crate-wood'}))continue;diamond(o.x,o.y,'#ab824b','#dab273');poly([{x:p.x-22*camera.zoom,y:p.y},{x:p.x,y:p.y+11*camera.zoom},{x:p.x,y:p.y-3*camera.zoom},{x:p.x-22*camera.zoom,y:p.y-14*camera.zoom}],'#7b603c');poly([{x:p.x,y:p.y+11*camera.zoom},{x:p.x+22*camera.zoom,y:p.y},{x:p.x+22*camera.zoom,y:p.y-14*camera.zoom},{x:p.x,y:p.y-3*camera.zoom}],'#967343');poly([{x:p.x,y:p.y-25*camera.zoom},{x:p.x+22*camera.zoom,y:p.y-14*camera.zoom},{x:p.x,y:p.y-3*camera.zoom},{x:p.x-22*camera.zoom,y:p.y-14*camera.zoom}],'#bc965a','#d3b47c');continue;}
- diamond(o.x,o.y,null,o.color);const img=image(o),frame=unitArt(o),spriteWidth=frame.width/4*camera.zoom;if(img.complete&&img.naturalWidth)ctx.drawImage(img,p.x-spriteWidth/2,p.y-59*camera.zoom,spriteWidth,64*camera.zoom);label(o.label,o.x,o.y,o.color,18*camera.zoom);
+ diamond(o.x,o.y,null,o.color);const img=image(o),frame=unitArt(o),spriteWidth=frame.width/4*camera.zoom;if(img.complete&&img.naturalWidth)ctx.drawImage(img,p.x-spriteWidth/2,p.y-59*camera.zoom,spriteWidth,64*camera.zoom);ctx.save();ctx.translate(p.x,p.y+5*camera.zoom);drawFlamethrower(ctx,o,camera.zoom);ctx.restore();label(o.label,o.x,o.y,o.color,18*camera.zoom);
  }
 }
 function drawHighlights(){const boundsNow=bounds(camera,width,height);

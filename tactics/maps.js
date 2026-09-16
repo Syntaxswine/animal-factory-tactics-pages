@@ -36,7 +36,7 @@ export function roofEndpoint(m,p){return (m.climbs||[]).some(q=>[q,roofTop(q)].s
 
 export function canStep(m,a,b){return neighbors(m,a).some(p=>p.x===b.x&&p.y===b.y&&p.z===levelOf(b));}
 export const SPECIES=['horse','goat','donkey','sheep','cow','hen','pig-foreman','pig-director','skunk'];
-export const WEAPON_IDS=['hands','knife','pistol','rifle','assault'];
+export const WEAPON_IDS=['hands','knife','pistol','rifle','assault','flamethrower'];
 export function blankMap(name='Untitled local map'){
  return {version:2,width:W,height:H,levels:LEVELS,name,terrain:Array.from({length:H},()=>Array(W).fill('yard')),upper:[{},{}],edges:{},stairs:[],climbs:[],props:[],starts:[{x:3,y:4,z:0},{x:3,y:6,z:0},{x:2,y:5,z:0},{x:2,y:7,z:0}],guards:[],exits:[{x:3,y:5,z:0}]};
 }
@@ -51,7 +51,7 @@ export function addStairs(m,x,y,z,kind='stairs'){if(!inBounds(x,y,z)||z>=LEVELS-
 export function factoryMap(){
  const m=blankMap('Factory test');stampRoom(m,10,3,8,8);stampRoom(m,16,14,8,8);
  for(const [x,y]of [[7,6],[7,7],[5,12],[6,12],[9,15],[10,15],[13,5],[16,8],[13,12],[14,12],[20,6],[21,6],[20,18],[23,16],[23,19],[12,19],[7,20]])m.terrain[y][x]='crate';
- [[12,6,'pig-foreman','pistol'],[15,5,'cow','rifle'],[16,9,'pig-foreman','pistol'],[13,9,'donkey','knife'],[21,4,'pig-foreman','assault'],[23,5,'goat','pistol'],[22,9,'cow','rifle'],[23,11,'pig-foreman','pistol'],[18,16,'pig-foreman','pistol'],[22,17,'donkey','knife'],[18,20,'cow','rifle'],[22,20,'pig-foreman','assault']].forEach(([x,y,species,weapon])=>m.guards.push({x,y,z:0,species,weapon}));
+ [[12,6,'pig-foreman','pistol'],[15,5,'cow','rifle'],[16,9,'pig-foreman','pistol'],[13,9,'donkey','knife'],[21,4,'pig-foreman','flamethrower'],[23,5,'goat','pistol'],[22,9,'cow','rifle'],[23,11,'pig-foreman','pistol'],[18,16,'pig-foreman','pistol'],[22,17,'donkey','knife'],[18,20,'cow','rifle'],[22,20,'pig-foreman','assault']].forEach(([x,y,species,weapon])=>m.guards.push({x,y,z:0,species,weapon}));
  // A visible, accessible three-level training stairwell near the squad start.
  for(let z=1;z<LEVELS;z++)stampRoom(m,1,9,5,5,z);
  addStairs(m,3,10,0);addStairs(m,3,12,1,'ladder');m.props=[{x:7,y:10,z:0,kind:'barrel-single'},{x:7,y:17,z:0,kind:'workbench-vise'},{x:4,y:16,z:0,kind:'sandbags'},{x:4,y:18,z:0,kind:'hospital-bed'},{x:5,y:18,z:0,kind:'iv-stand'},{x:4,y:21,z:0,kind:'medicine-cabinet-closed'},{x:9,y:17,z:0,kind:'toolbox-open'},{x:8,y:19,z:0,kind:'spare-parts'},{x:1,y:2,z:0,kind:'tree-broadleaf'},{x:7,y:2,z:0,kind:'tree-pine'},{x:1,y:7,z:0,kind:'bush'},{x:8,y:3,z:0,kind:'reeds'},{x:1,y:9,z:1,kind:'roof-corrugated-flat'},{x:4,y:9,z:1,kind:'roof-corrugated-sloped'},{x:4,y:12,z:2,kind:'roof-flat-parapet'}];return m;
