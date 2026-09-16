@@ -4,6 +4,8 @@ import {PROPS,propAt} from './environment.js';
 const EPS=1e-7;
 export const bodyHeight=u=>u.hp<=0?.3:u.stance==='prone'?.55:u.stance==='kneeling'?1.2:1.8;
 export const muzzleHeight=u=>u.stance==='prone'?.35:u.stance==='kneeling'?.9:1.3;
+export const eyeHeight=muzzleHeight;
+export const targetHeight=(u,zone='torso')=>zone==='weapon'?muzzleHeight(u):bodyHeight(u)*(zone==='head'?.92:zone==='legs'?.28:.72);
 const point=(origin,direction,t)=>({x:origin.x+direction.x*t,y:origin.y+direction.y*t,h:origin.h+direction.h*t});
 const slab=(origin,velocity,low,high)=>Math.abs(velocity)<EPS?(origin>=low&&origin<=high?[-Infinity,Infinity]:null):[Math.min((low-origin)/velocity,(high-origin)/velocity),Math.max((low-origin)/velocity,(high-origin)/velocity)];
 
@@ -45,6 +47,7 @@ export function traceProjectile(state,shooter,origin,direction,reach){
    }
    const z=Math.floor(p.h/3),height=p.h-z*3;
    if(z>=0&&z<LEVELS&&height<=2.7){
+    if(ax!==bx&&ay!==by)for(const [x,y]of [[ax,by],[bx,ay]]){const terrain=terrainAt(state,x,y,z),prop=PROPS[propAt(state,x,y,z)?.kind],top=terrain==='wall'||prop?.tall?2.7:terrain==='crate'||prop?.solid&&prop.cover>0?.8:0;if(top&&height<=top)return impact('cover',t);}
     if(ax!==bx)for(const y of new Set([ay,by]))if(sightEdge(state,{x:ax,y,z},{x:bx,y,z},{height,offset:p.y-y+.5}))return impact('wall',t);
     if(ay!==by)for(const x of new Set([ax,bx]))if(sightEdge(state,{x,y:ay,z},{x,y:by,z},{height,offset:p.x-x+.5}))return impact('wall',t);
    }
@@ -63,8 +66,8 @@ export function traceProjectile(state,shooter,origin,direction,reach){
 
 export function bulletTrajectory(state,shooter,target,{accurate,zone='torso',chance=50,burst=false,reach},random){
  const origin={x:shooter.x,y:shooter.y,h:levelOf(shooter)*3+muzzleHeight(shooter)};
- const targetHeight=bodyHeight(target)*(zone==='head'?.92:zone==='legs'?.28:.72);
- let dx=target.x-origin.x,dy=target.y-origin.y,dh=levelOf(target)*3+targetHeight-origin.h;
+ const aimHeight=targetHeight(target,zone);
+ let dx=target.x-origin.x,dy=target.y-origin.y,dh=levelOf(target)*3+aimHeight-origin.h;
  if(!accurate){
   const distance=Math.max(.5,Math.hypot(dx,dy)),angle=Math.atan2(dy,dx);
   const minimum=Math.asin(Math.min(.9,.42/distance)),maximum=Math.max(minimum,.08+(1-chance/100)*.65+(burst?.12:0));
