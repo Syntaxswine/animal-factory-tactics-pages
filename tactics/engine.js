@@ -1,7 +1,7 @@
 import {explosivePreview,explosiveTrajectory,detonate} from './explosives.js';
 import {initPersonality,friendlyReaction,helped,settleStress,injuryStrain,killRelief} from './personalities.js';
 import {initProgression,awardCombatXP,train} from './progression.js';
-import {bulletTrajectory,traceProjectile,eyeHeight,targetHeight} from './projectiles.js';
+import {bulletTrajectory,shotgunTrajectories,traceProjectile,eyeHeight,targetHeight} from './projectiles.js';
 import {gridLayout,storeLayout,placeItem,initInventory,reserve,consumeAmmo,syncWeapons,accepts,receive} from './inventory.js';
 import {inCone,headingTo,sightOf,identifyRange,detectRange} from './perception.js';
 export {inCone,headingTo,bearingOffset,sightOf,identifyRange,detectRange,acuity,SIGHT,JOHNSON} from './perception.js';
@@ -13,14 +13,17 @@ export {W,H} from './maps.js';
 export const WEAPONS={
  hands:{name:'Workers’ fists',short:'Hands',cost:3,range:1,damage:16,mag:0},
  knife:{name:'NR-40 knife',short:'NR-40',cost:3,range:1,damage:27,mag:0},
- pistol:{name:'TT-33 pistol',short:'TT-33',cost:4,range:8,damage:27,mag:8},
- rifle:{name:'Mosin-Nagant',short:'Mosin',cost:6,range:14,damage:48,mag:5},
- assault:{name:'AK-47',short:'AK-47',cost:4,range:10,damage:26,mag:30},
+ pistol:{name:'TT-33 pistol',short:'TT-33',cost:4,range:12,damage:27,mag:8,accuracy:-20,rangeLoss:35},
+ rifle:{name:'Mosin-Nagant',short:'Mosin',cost:6,range:24,damage:48,mag:5,accuracy:5,rangeLoss:18},
+ assault:{name:'AK-47',short:'AK-47',cost:4,range:20,damage:26,mag:30,rangeLoss:26},
+ shotgun:{name:'Pump-action shotgun',short:'Shotgun',cost:5,range:12,damage:12,mag:6,pellets:6,rangeLoss:15},
+ sniper:{name:'Sniper rifle',short:'Sniper',cost:8,range:36,damage:75,mag:5,accuracy:10,rangeLoss:12},
  grenade:{name:'Fragmentation grenade',short:'Grenade',cost:5,range:10,damage:120,mag:3,blast:3,arc:true,thrown:true},
  launcher:{name:'Grenade launcher',short:'Launcher',cost:6,range:22,damage:140,mag:1,blast:3,arc:true},
  rpg:{name:'RPG',short:'RPG',cost:7,range:40,damage:220,mag:1,blast:4},
- flamethrower:{name:'Backpack flamethrower',short:'Flamer',cost:6,range:3,damage:180,mag:4,incendiary:true}
+ flamethrower:{name:'Backpack flamethrower',short:'Flamer',cost:6,range:10,damage:180,mag:4,rangeLoss:15,incendiary:true}
 };
+export const weaponDamage=(w,range)=>w.incendiary?Math.round(w.damage*(range<=3?1:Math.max(.25,1-(range-3)/7*.75))):w.damage;
 export const AIM_ZONES={head:{label:'Head',accuracy:-25,damage:1.5},weapon:{label:'Weapon',accuracy:-15,damage:.75},torso:{label:'Torso',accuracy:0,damage:1},legs:{label:'Legs',accuracy:-10,damage:.85}};
 export function tankExplosionChance(unit,zone){
  const carrying=unit.weapon==='flamethrower'||unit.pack?.some(i=>i.type==='weapon'&&i.kind==='flamethrower');
@@ -44,12 +47,13 @@ export function log(s,message){s.log.unshift(message);s.log=s.log.slice(0,50);s.
 export function createGame(seed=1947,definition=factoryMap(),detect=true,difficulty='standard'){
  const errors=validateMap(definition);if(errors.length)throw Error(errors.join(' '));
  const s={difficulty:difficulty==='easy'?'easy':'standard',map:structuredClone(definition.terrain),upper:structuredClone(definition.upper),stairs:structuredClone(definition.stairs),climbs:structuredClone(definition.climbs||[]),props:structuredClone(definition.props||[]),sectors:structuredClone(definition.sectors),edges:{...definition.edges},definition:structuredClone(definition),units:[],phase:'explore',round:0,selected:0,visible:new Set(),seen:new Set(),detected:new Set(),glimpses:{},log:[],seed,revision:0,queue:[],enemyIndex:0,contacts:{},effect:null};
- const add=(team,name,species,x,y,weapon,z=0)=>s.units.push({id:s.units.length,team,name,species,x,y,z,medical:team==='squad'?[0,25,50,100][s.units.length]:0,medkits:team==='squad'?1:0,wireCutters:team==='squad',casualty:null,bleedTurns:0,sneaking:false,stealth:20,overwatch:null,lastHeard:null,stance:'standing',hp:team==='squad'?100:45,maxHp:team==='squad'?100:45,ap:team==='squad'?12:7,maxAp:team==='squad'?12:7,accuracy:team==='squad'?85:55,weapon,ammo:Object.fromEntries(Object.entries(WEAPONS).map(([k,v])=>[k,v.mag])),alert:false,lastKnown:null,facing:1,heading:team==='squad'?45:225,cone:sightOf({species}).field,moved:false,fired:false,lastAt:x+','+y+','+z,steps:0});
+ const add=(team,name,species,x,y,weapon,z=0)=>s.units.push({id:s.units.length,team,name,species,x,y,z,medical:team==='squad'?[0,25,50,100][s.units.length]:0,medkits:team==='squad'?1:0,wireCutters:team==='squad',casualty:null,bleedTurns:0,sneaking:false,stealth:20,overwatch:null,lastHeard:null,stance:'standing',hp:team==='squad'?100:45,maxHp:team==='squad'?100:45,ap:team==='squad'?12:Math.max(7,WEAPONS[weapon].cost),maxAp:team==='squad'?12:Math.max(7,WEAPONS[weapon].cost),accuracy:team==='squad'?85:55,weapon,ammo:Object.fromEntries(Object.entries(WEAPONS).map(([k,v])=>[k,v.mag])),alert:false,lastKnown:null,facing:1,heading:team==='squad'?45:225,cone:sightOf({species}).field,moved:false,fired:false,lastAt:x+','+y+','+z,steps:0});
  const cast=[['Yakov','horse','assault'],['Anya','goat','rifle'],['Misha','donkey','pistol'],['Vera','sheep','knife']];
  definition.starts.forEach((p,i)=>add('squad',cast[i][0],cast[i][1],p.x,p.y,cast[i][2],levelOf(p)));
  const names=['Boris','Lev','Grigori','Oleg','Pavel','Igor','Anton','Vadim','Yuri','Sasha','Pyotr','Nikolai'];
  definition.guards.forEach((g,i)=>{add('guard',names[i]||`Guard ${i+1}`,g.species,g.x,g.y,g.weapon,levelOf(g));if(g.outfit)s.units.at(-1).outfit=g.outfit;});
  for(const u of s.units){initInventory(u,WEAPONS);if(u.team==='squad'){initProgression(u);initPersonality(u);}}s.loot=definition.starts.map((p,i)=>({...p,items:[{type:'ammo',kind:i%2?'rifle':'pistol',count:i%2?5:8}]}));
+ if(definition.name==='Factory test')for(const [i,kind]of ['shotgun','sniper'].entries())s.loot[i].items.push({type:'weapon',kind,rounds:WEAPONS[kind].mag},{type:'ammo',kind,count:12});
  if(definition.name==='Factory test')for(const [i,kind]of ['grenade','launcher','rpg'].entries())s.loot[i+1].items.push({type:'weapon',kind,rounds:WEAPONS[kind].mag},{type:'ammo',kind,count:kind==='grenade'?6:3});
  if(definition.name==='Factory test')s.loot[0].items.push({type:'weapon',kind:'flamethrower',rounds:4},{type:'ammo',kind:'flamethrower',count:4});
  if(detect)refresh(s);log(s,`Local map ready / ${definition.guards.length} guards.`);return s;
@@ -136,15 +140,15 @@ export function previewAttack(s,a,b,burst=false,zone='torso',token=null){
  if(WEAPONS[a.weapon].blast)return explosivePreview(s,a,b,WEAPONS[a.weapon]);
  if(!Object.hasOwn(AIM_ZONES,zone))return {ok:false,reason:'Choose an aim location'};
  const aim=AIM_ZONES[zone];
- const w=WEAPONS[a.weapon],rounds=burst&&a.weapon==='assault'?3:1,cost=w.cost+(rounds===3?2:0),melee=w.mag===0,range=melee?distance(a,b):Math.hypot(a.x-b.x,a.y-b.y);
+ const w=WEAPONS[a.weapon],rounds=burst&&a.weapon==='assault'?3:1,cost=w.cost+(rounds===3?2:0),melee=w.mag===0,range=melee?(levelOf(a)===levelOf(b)?Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y)):Infinity):Math.hypot(a.x-b.x,a.y-b.y);
  const visible=token!==retaliationToken&&a.team==='squad'?squad(s).some(p=>canSee(s,p,b)):canSee(s,a,b);
  const cover=!melee&&coverAgainst(s,a,b),heightCover=!melee&&levelOf(b)>levelOf(a)&&(a.x!==b.x||a.y!==b.y),coverPenalty=cover?25:heightCover?15:0,rangePenalty=melee?0:Math.max(0,levelOf(b)-levelOf(a)),effectiveRange=Math.max(0,w.range-rangePenalty);
- const chance=Math.max(10,Math.min(95,a.accuracy+(melee?10:0)+aim.accuracy-Math.max(0,range+rangePenalty-3)*3-coverPenalty-(rounds===3?10:0)));
+ const chance=Math.max(10,Math.min(95,a.accuracy+(melee?10:0)+(w.accuracy||0)+aim.accuracy-(melee?0:Math.max(0,range+rangePenalty-3)/Math.max(1,w.range-3)*(w.rangeLoss??25))-coverPenalty-(rounds===3?10:0)));
  let reason='';
  if(a.burningTurns>0)reason='On fire: running in panic';else if(melee&&zone!=='torso')reason='Aimed shots require a firearm';else if(!visible)reason='Target not visible';else if(!inCone(a,b))reason='Outside personal sight cone';else if(range>effectiveRange)reason='Out of range';else if(!lineOfSight(s,a,b))reason='Line of fire blocked';else if(!canSee(s,a,b))reason='Not identified: face the target';else if(!melee&&!zoneVisible(s,a,b,zone))reason=AIM_ZONES[zone].label+' hidden by cover';else if(w.mag&&a.ammo[a.weapon]<rounds)reason='Reload required';else if(!['explore','won'].includes(s.phase)&&a.ap<cost)reason='Not enough AP';
  let obstruction=null;
  if(!reason&&!melee&&!w.incendiary){const path=bulletTrajectory(s,a,b,{accurate:true,zone,reach:w.range*1.5},()=>0);if(path.unitId!==b.id){const unit=s.units.find(u=>u.id===path.unitId);obstruction=unit?{kind:'unit',id:unit.id,name:unit.name,friendly:unit.team===a.team}:{kind:path.kind};}}
- return {ok:!reason,reason,cost,rounds,chance:Math.round(chance),cover,heightCover,coverPenalty,rangePenalty,damage:Math.round(w.damage*aim.damage),zone,range:effectiveRange,tankChance:melee?0:tankExplosionChance(b,zone),obstruction};
+ return {ok:!reason,reason,cost,rounds,chance:Math.round(chance),cover,heightCover,coverPenalty,rangePenalty,damage:Math.round(weaponDamage(w,range)*aim.damage),pellets:w.pellets||1,zone,range:effectiveRange,tankChance:melee?0:tankExplosionChance(b,zone),obstruction};
 }
 function random(s){s.seed=(Math.imul(s.seed,1664525)+1013904223)>>>0;return s.seed/4294967296;}
 function combatDamage(s,u,damage,fatal=false,source=null){
@@ -207,23 +211,27 @@ export function attack(s,a,b,burst=false,byAI=false,zone='torso',reaction=false)
   f.left--;shooter.overwatch=null;shooter.heading=headingTo(shooter,f.aim);shooter.facing=(f.aim.x-shooter.x)-(f.aim.y-shooter.y)>=0?1:-1;
   emitNoise(s,shooter,w.mag?30:2);if(w.mag)alarm(s,shooter,w.range*2);if(w.mag)shooter.ammo[f.weapon]--;
   const accurate=w.blast?false:random(s)*100<f.p.chance,ballistic=w.mag&&!w.incendiary;
-  const shot=w.blast?explosiveTrajectory(s,shooter,f.aim,w,f.p,()=>random(s)):ballistic?bulletTrajectory(s,shooter,f.aim,{accurate,zone:f.zone,chance:f.p.chance,burst:f.p.rounds>1,reach:w.range*1.5},()=>random(s)):null;
-  if(shot)trajectories.push(shot);
+  const pellets=w.pellets?shotgunTrajectories(s,shooter,f.aim,{accurate,zone:f.zone,chance:f.p.chance,reach:w.range*1.5,pellets:w.pellets},()=>random(s)):null;
+  const shot=pellets?pellets[0]:w.blast?explosiveTrajectory(s,shooter,f.aim,w,f.p,()=>random(s)):ballistic?bulletTrajectory(s,shooter,f.aim,{accurate,zone:f.zone,chance:f.p.chance,burst:f.p.rounds>1,reach:w.range*1.5},()=>random(s)):null;
+  if(shot)trajectories.push(...(pellets||[shot]));
   const victim=ballistic?s.units.find(u=>u.id===shot.unitId):accurate&&alive(target)?target:null;
-  const event={ax:shooter.x,ay:shooter.y,bx:f.aim.x,by:f.aim.y,az:levelOf(shooter),bz:levelOf(f.aim),hit:!!victim,incendiary:!!w.incendiary,trajectories:shot?[shot]:[],explosions:[],reply:f.reply};sequence.push(event);
+  const event={ax:shooter.x,ay:shooter.y,bx:f.aim.x,by:f.aim.y,az:levelOf(shooter),bz:levelOf(f.aim),hit:!!victim,incendiary:!!w.incendiary,trajectories:pellets||(shot?[shot]:[]),explosions:[],reply:f.reply};sequence.push(event);
   const blastResult=w.blast?detonate(s,shot,w):null;
   if(blastResult){event.explosions.push(blastResult.blast);explosions.push(blastResult.blast);event.hit=blastResult.hits.length>0;log(s,`${shooter.name}: ${w.short} detonated / ${blastResult.blast.destroyed} structures destroyed.`);}
-  if(!victim&&!blastResult){log(s,`${shooter.name} → ${target.name}: miss${f.reply?' / retaliation':''}.`);continue;}
-  const impacts=blastResult?blastResult.hits:[{unit:victim,damage:Math.round(Math.round(w.damage*AIM_ZONES[shot?.zone||f.zone].damage)*(shooter.team==='guard'&&!w.incendiary?.65:1))}];
-  for(const {unit:victim,damage:amount}of impacts){
-  const hitZone=w.blast?'torso':shot?.zone||f.zone;
+  if(!victim&&!blastResult&&!pellets){log(s,`${shooter.name} → ${target.name}: miss${f.reply?' / retaliation':''}.`);continue;}
+  const pelletHits=pellets?.map(p=>({unit:s.units.find(u=>u.id===p.unitId),zone:p.zone,damage:Math.round(w.damage*AIM_ZONES[p.zone||f.zone].damage*(shooter.team==='guard'?.65:1))})).filter(p=>p.unit);
+  if(pellets){event.hit=pelletHits.length>0;if(!event.hit)log(s,`${shooter.name} → ${target.name}: pellets missed.`);}
+  const impacts=blastResult?blastResult.hits:pelletHits||[{unit:victim,damage:Math.round(Math.round(weaponDamage(w,Math.hypot(shooter.x-victim.x,shooter.y-victim.y))*AIM_ZONES[shot?.zone||f.zone].damage)*(shooter.team==='guard'&&!w.incendiary?.65:1))}];
+  const reacted=new Set();
+  for(const {unit:victim,damage:amount,zone:pelletZone}of impacts){
+  const hitZone=w.blast?'torso':pelletZone||shot?.zone||f.zone;
   if(victim.team==='guard'){victim.alert=true;victim.lastKnown={x:shooter.x,y:shooter.y,z:levelOf(shooter)};}
   const tankChance=w.mag?tankExplosionChance(victim,hitZone):0;
   if(tankChance>0&&random(s)<tankChance){const blast=explodeTanks(s,victim,shooter);explosions.push(blast);event.explosions.push(blast);}
   else {combatDamage(s,victim,amount,!!w.incendiary||incapacitated(victim),shooter);if(w.incendiary)ignite(s,victim);}
   const friendly=victim.team===shooter.team;
   log(s,`${shooter.name} → ${victim.name}: ${amount} damage${friendly?' / friendly fire':''}${f.reply?' / retaliation':''}${!alive(victim)?' / down':''}.`);
-  if(friendly&&victim!==shooter&&victim.team==='squad'&&alive(victim)){
+  if(friendly&&victim!==shooter&&victim.team==='squad'&&alive(victim)&&!reacted.has(victim.id)){reacted.add(victim.id);
    const armed=WEAPONS[victim.weapon].mag>0,turned={...victim,heading:headingTo(victim,shooter),ap:WEAPONS[victim.weapon].cost};
    const reply=armed&&alive(shooter)?previewAttack(s,turned,shooter,false,'torso',retaliationToken):{ok:false};
    const response=friendlyReaction(s,victim,shooter,amount,reply.ok);

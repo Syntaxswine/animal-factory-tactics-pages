@@ -12,7 +12,7 @@ export function explosivePreview(s,a,target,w){
  else if(range>maxRange||range+Math.max(0,-height)*3>maxRange)reason='Out of range';
  else if(a.ammo[a.weapon]<1)reason='Reload required';
  else if(!['explore','won'].includes(s.phase)&&a.ap<w.cost)reason='Not enough AP';
- const beyond=range>effectiveRange,chance=beyond?10:Math.max(20,Math.min(95,a.accuracy-Math.max(0,range-3)*1.5));
+ const beyond=range>effectiveRange,chance=beyond?10:Math.max(20,Math.min(95,a.accuracy-Math.max(0,range-3)/Math.max(1,effectiveRange-3)*25));
  return {ok:!reason,reason,cost:w.cost,rounds:1,chance:Math.round(chance),damage:w.damage,zone:'torso',range:effectiveRange,maxRange,beyond,blastRadius:w.blast};
 }
 

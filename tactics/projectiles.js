@@ -79,3 +79,15 @@ export function bulletTrajectory(state,shooter,target,{accurate,zone='torso',cha
  if(accurate&&result.unitId===target.id)result.zone=zone;
  return {...result,origin,accurate};
 }
+
+// One shell emits all pellets together. Angular spread naturally thins the pattern with distance.
+export function shotgunTrajectories(state,shooter,target,{accurate,zone='torso',chance=50,reach,pellets=6},random){
+ const origin={x:shooter.x,y:shooter.y,h:levelOf(shooter)*3+muzzleHeight(shooter)},range=Math.max(.1,Math.hypot(target.x-origin.x,target.y-origin.y));
+ const angle=Math.atan2(target.y-origin.y,target.x-origin.x)+(accurate?0:(random()<.5?-1:1)*(.10+(1-chance/100)*.2));
+ const slope=(levelOf(target)*3+targetHeight(target,zone)-origin.h)/range;
+ return Array.from({length:pellets},()=>{const phase=random()*Math.PI*2,radius=Math.sqrt(random())*.11,yaw=angle+Math.cos(phase)*radius;
+  const hit=traceProjectile(state,shooter,origin,{x:Math.cos(yaw),y:Math.sin(yaw),h:slope+Math.sin(phase)*radius},reach);
+  if(accurate&&zone==='weapon'&&hit.unitId===target.id&&Math.abs(hit.h-levelOf(target)*3-targetHeight(target,'weapon'))<.15)hit.zone='weapon';
+  return {...hit,origin,accurate,pellet:true};
+ });
+}
