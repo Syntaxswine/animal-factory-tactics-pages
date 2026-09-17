@@ -1,3 +1,4 @@
+import {woodlandDepth} from './woodland.js';
 import {eyeHeight} from './projectiles.js';
 import {detectRange} from './perception.js';
 import {W,H,LEVELS,levelOf,terrainAt} from './maps.js';
@@ -11,7 +12,7 @@ function scene(s){const signature=JSON.stringify([s.map,s.upper,s.edges,s.props,
  for(const p of s.props||[]){const rule=PROPS[p.kind],height=rule?.tall?2.7:rule?.solid&&rule.cover>0?.8:0;for(const q of propCells(p))tall[index(q.x,q.y,q.z)]=Math.max(tall[index(q.x,q.y,q.z)],height);}
  for(const p of s.stairs||[])holes[index(p.x,p.y,p.z+1)]=1;
  for(const [k,v]of Object.entries(s.edges)){const [axis,x,y,z=0]=k.split(':'),rule=EDGES[v];if(+x>=0&&+y>=0&&rule?.opaque)(axis==='e'?east:south)[index(+x,+y,+z)]=rule.window?2:1;}
- c={signature,floors,tall,east,south,holes,observers:new Map()};caches.set(s,c);return c;
+ c={hasWoodland:signature.includes('woodland'),signature,floors,tall,east,south,holes,observers:new Map()};caches.set(s,c);return c;
 }
 // Cached grid traversal of the same .8-unit cover / 2.7-unit walls used by projectiles.
 // Reveal the destination surface itself; only intervening volumes hide a terrain tile.
@@ -31,4 +32,4 @@ function clear(c,a,b){
  }
  return true;
 }
-export function terrainVisibility(s,observers){const c=scene(s),observerKey=observers.map(p=>p.x+','+p.y+','+levelOf(p)+','+p.heading+','+p.cone+','+(p.species||'')+','+eyeHeight(p)).join(';');if(c.observerKey===observerKey)return c.visible;const visible=new Set();for(const p of observers){const cacheKey=p.x+','+p.y+','+levelOf(p)+','+p.heading+','+p.cone+','+(p.species||'')+','+eyeHeight(p);let cells=c.observers.get(cacheKey);if(!cells){cells=[];for(let z=0;z<LEVELS;z++)for(let y=Math.max(0,p.y-TERRAIN_RANGE);y<=Math.min(H-1,p.y+TERRAIN_RANGE);y++)for(let x=Math.max(0,p.x-TERRAIN_RANGE);x<=Math.min(W-1,p.x+TERRAIN_RANGE);x++){const id=index(x,y,z);if(z!==levelOf(p)&&z>0&&!c.floors[id])continue;if(Math.hypot(x-p.x,y-p.y,(z-levelOf(p))*3)<=detectRange(p,{x,y},TERRAIN_RANGE)&&clear(c,p,{x,y,z}))cells.push(z?x+','+y+','+z:x+','+y);}c.observers.set(cacheKey,cells);if(c.observers.size>12)c.observers.delete(c.observers.keys().next().value);}for(const k of cells)visible.add(k);}c.observerKey=observerKey;c.visible=visible;return visible;}
+export function terrainVisibility(s,observers){const c=scene(s),observerKey=observers.map(p=>p.x+','+p.y+','+levelOf(p)+','+p.heading+','+p.cone+','+(p.species||'')+','+eyeHeight(p)).join(';');if(c.observerKey===observerKey)return c.visible;const visible=new Set();for(const p of observers){const cacheKey=p.x+','+p.y+','+levelOf(p)+','+p.heading+','+p.cone+','+(p.species||'')+','+eyeHeight(p);let cells=c.observers.get(cacheKey);if(!cells){cells=[];for(let z=0;z<LEVELS;z++)for(let y=Math.max(0,p.y-TERRAIN_RANGE);y<=Math.min(H-1,p.y+TERRAIN_RANGE);y++)for(let x=Math.max(0,p.x-TERRAIN_RANGE);x<=Math.min(W-1,p.x+TERRAIN_RANGE);x++){const id=index(x,y,z);if(z!==levelOf(p)&&z>0&&!c.floors[id])continue;if(Math.hypot(x-p.x,y-p.y,(z-levelOf(p))*3)<=detectRange(p,{x,y},TERRAIN_RANGE)&&clear(c,p,{x,y,z})&&(!c.hasWoodland||Math.hypot(x-p.x,y-p.y,(z-levelOf(p))*3)+9*woodlandDepth(s,p,{x,y,z})<=detectRange(p,{x,y},TERRAIN_RANGE)))cells.push(z?x+','+y+','+z:x+','+y);}c.observers.set(cacheKey,cells);if(c.observers.size>12)c.observers.delete(c.observers.keys().next().value);}for(const k of cells)visible.add(k);}c.observerKey=observerKey;c.visible=visible;return visible;}

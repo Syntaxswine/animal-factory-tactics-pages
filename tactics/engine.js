@@ -5,6 +5,7 @@ import {bulletTrajectory,shotgunTrajectories,traceProjectile,eyeHeight,targetHei
 import {gridLayout,storeLayout,placeItem,initInventory,reserve,consumeAmmo,syncWeapons,accepts,receive} from './inventory.js';
 import {inCone,headingTo,sightOf,identifyRange,detectRange} from './perception.js';
 export {inCone,headingTo,bearingOffset,sightOf,identifyRange,detectRange,acuity,SIGHT,JOHNSON} from './perception.js';
+import {woodlandDepth} from './woodland.js';
 import {terrainVisibility,TERRAIN_RANGE,CHARACTER_RANGE} from './visibility.js';
 export {TERRAIN_RANGE,CHARACTER_RANGE} from './visibility.js';
 import {PROPS,EDGES,propAt,propTall,propCells} from './environment.js';
@@ -48,12 +49,12 @@ export const walkable=(s,x,y,z=0)=>passable(s,{x,y,z});
 export function log(s,message){s.log.unshift(message);s.log=s.log.slice(0,50);s.revision++;}
 export function createGame(seed=1947,definition=factoryMap(),detect=true,difficulty='standard'){
  const errors=validateMap(definition);if(errors.length)throw Error(errors.join(' '));
- const s={difficulty:difficulty==='easy'?'easy':'standard',map:structuredClone(definition.terrain),upper:structuredClone(definition.upper),stairs:structuredClone(definition.stairs),climbs:structuredClone(definition.climbs||[]),props:structuredClone(definition.props||[]),sectors:structuredClone(definition.sectors),edges:{...definition.edges},definition:structuredClone(definition),units:[],phase:'explore',round:0,selected:0,visible:new Set(),seen:new Set(),detected:new Set(),glimpses:{},log:[],seed,revision:0,queue:[],enemyIndex:0,contacts:{},effect:null};
+ const s={difficulty:difficulty==='easy'?'easy':'standard',map:structuredClone(definition.terrain),upper:structuredClone(definition.upper),stairs:structuredClone(definition.stairs),climbs:structuredClone(definition.climbs||[]),props:structuredClone(definition.props||[]),sectors:structuredClone(definition.sectors),edges:{...definition.edges},definition:structuredClone(definition),units:[],phase:'explore',round:0,selected:0,visible:new Set(),seen:new Set(),detected:new Set(),glimpses:{},log:[],seed,perceptionSeed:seed,revision:0,queue:[],enemyIndex:0,contacts:{},effect:null};
  const add=(team,name,species,x,y,weapon,z=0)=>s.units.push({id:s.units.length,team,name,species,x,y,z,medical:team==='squad'?[0,25,50,100][s.units.length]:0,medkits:team==='squad'?1:0,wireCutters:team==='squad',casualty:null,bleedTurns:0,sneaking:false,stealth:20,overwatch:null,lastHeard:null,stance:'standing',hp:team==='squad'?100:45,maxHp:team==='squad'?100:45,ap:team==='squad'?12:Math.max(7,WEAPONS[weapon].cost),maxAp:team==='squad'?12:Math.max(7,WEAPONS[weapon].cost),accuracy:team==='squad'?85:55,weapon,ammo:Object.fromEntries(Object.entries(WEAPONS).map(([k,v])=>[k,v.mag])),alert:false,lastKnown:null,facing:1,heading:team==='squad'?45:225,cone:sightOf({species}).field,moved:false,fired:false,lastAt:x+','+y+','+z,steps:0});
  const cast=[['Yakov','horse','assault'],['Anya','goat','rifle'],['Misha','donkey','pistol'],['Vera','sheep','knife']];
  definition.starts.forEach((p,i)=>add('squad',cast[i][0],cast[i][1],p.x,p.y,cast[i][2],levelOf(p)));
  const names=['Boris','Lev','Grigori','Oleg','Pavel','Igor','Anton','Vadim','Yuri','Sasha','Pyotr','Nikolai'];
- definition.guards.forEach((g,i)=>{add('guard',names[i]||`Guard ${i+1}`,g.species,g.x,g.y,g.weapon,levelOf(g));if(g.outfit)s.units.at(-1).outfit=g.outfit;});
+ definition.guards.forEach((g,i)=>{add('guard',names[i]||`Guard ${i+1}`,g.species,g.x,g.y,g.weapon,levelOf(g));if(g.outfit)s.units.at(-1).outfit=g.outfit;if(Number.isFinite(g.heading))s.units.at(-1).heading=g.heading;});
  for(const u of s.units){initInventory(u,WEAPONS);if(u.team==='squad'){initProgression(u);initPersonality(u);}}s.loot=definition.starts.map((p,i)=>({...p,items:[{type:'ammo',kind:i%2?'rifle':'pistol',count:i%2?5:8}]}));
  if(definition.name==='Factory test')for(const [i,kind]of ['shotgun','sniper','smg','hmg'].entries())s.loot[i].items.push({type:'weapon',kind,rounds:WEAPONS[kind].mag},{type:'ammo',kind,count:12});
  if(definition.name==='Factory test')for(const [i,kind]of ['grenade','launcher','rpg'].entries())s.loot[i+1].items.push({type:'weapon',kind,rounds:WEAPONS[kind].mag},{type:'ammo',kind,count:kind==='grenade'?6:3});
@@ -85,9 +86,31 @@ export function pathTo(s,u,x,y,z=levelOf(u)){
 }
 export const sightRange=(a,b)=>b?.sneaking?Math.max(8,CHARACTER_RANGE-20-(b.stealth||0)*.2-(stanceOf(b)==='prone'?10:0)):CHARACTER_RANGE;
 // 0 unseen, 1 glimpsed (a moving target inside the detect lobe), 2 identified (inside the identify lobe). Walls block both. See docs/tactics/SIGHT.md.
-export function perceive(s,a,b){const cap=sightRange(a,b),d=distance(a,b);if(d<=identifyRange(a,b,cap))return lineOfSight(s,a,b)?2:0;if(b.moved&&d<=detectRange(a,b,cap))return lineOfSight(s,a,b)?1:0;return 0;}
+export function perceive(s,a,b){const cap=sightRange(a,b),d=distance(a,b)+9*woodlandDepth(s,a,b);if(d<=identifyRange(a,b,cap))return lineOfSight(s,a,b)?2:0;if(b.moved&&d<=detectRange(a,b,cap))return lineOfSight(s,a,b)?1:0;return 0;}
 export const glimpsed=(s,a,b)=>perceive(s,a,b)>=1;
 export const canSee=(s,a,b)=>perceive(s,a,b)===2;
+// Awareness rolls are cached until movement or a new turn; UI refresh never rerolls.
+export function detectionChance(s,a,b){
+ if(!canSee(s,a,b))return 0;
+ const range=identifyRange(a,b,sightRange(a,b));
+ let chance=.95-.5*Math.min(1,distance(a,b)/Math.max(1,range));
+ if(b.sneaking)chance*=Math.max(.2,.55-(b.stealth||0)*.003);
+ if(stanceOf(b)==='kneeling')chance*=.75;else if(stanceOf(b)==='prone')chance*=.45;
+ if(coverAgainst(s,a,b))chance*=.45;
+ return Math.max(.01,chance*Math.exp(-woodlandDepth(s,a,b)*.35));
+}
+export function notices(s,a,b){
+ const records=a.noticed||(a.noticed={}),old=records[b.id];
+ if(!canSee(s,a,b)){delete records[b.id];return false;}
+ if(old?.seen)return true;
+ const stamp=[s.round,a.x,a.y,levelOf(a),a.heading,a.steps,b.x,b.y,levelOf(b),b.steps].join(',');
+ if(old?.stamp===stamp)return false;
+ // Independent deterministic stream leaves combat RNG untouched.
+ let hash=(s.perceptionSeed??1947)>>>0;
+ for(const c of a.id+':'+b.id+':'+stamp)hash=Math.imul(hash^c.charCodeAt(0),16777619)>>>0;
+ hash^=hash>>>16;hash=Math.imul(hash,0x45d9f3b);hash^=hash>>>16;
+ const seen=(hash>>>0)/4294967296<detectionChance(s,a,b);records[b.id]={stamp,seen};return seen;
+}
 export function refresh(s){
  const oldDetected=s.detected,oldVisible=s.visible,oldGlimpses=s.glimpses||{};
  for(const u of s.units){const at=u.x+','+u.y+','+levelOf(u);u.moved=!!u.fired||u.lastAt!==at;u.lastAt=at;u.fired=false;}s.visible=terrainVisibility(s,squad(s));s.detected=new Set(guards(s).filter(g=>squad(s).some(p=>canSee(s,p,g))).map(g=>g.id));
@@ -102,7 +125,7 @@ export function refresh(s){
  const pending=s.units.some(u=>u.casualty==='bleeding'||alive(u)&&u.burningTurns>0)||(s.fires?.length||0)>0;
  if(!guards(s).some(g=>g.alert)&&!s.detected.size&&!pending)for(const u of s.units)if(u.casualty==='stable'){u.hp=5;u.casualty=null;log(s,u.name+' recovered after the encounter (5 HP).');}
  if(!guards(s).length&&!pending){if(s.phase!=='won'){log(s,'Local map cleared. Explore or gather at the travel marker.');s.queue=[];}s.phase='won';s.revision++;return;}
- for(const g of guards(s)){if(squad(s).some(p=>canSee(s,p,g)))g.alert=true;const targets=squad(s).filter(p=>canSee(s,g,p));if(targets.length){g.alert=true;const p=targets.sort((a,b)=>distance(g,a)-distance(g,b))[0];g.lastKnown={x:p.x,y:p.y,z:levelOf(p)};}
+ for(const g of guards(s)){const targets=squad(s).filter(p=>notices(s,g,p));if(targets.length){g.alert=true;const p=targets.sort((a,b)=>distance(g,a)-distance(g,b))[0];g.lastKnown={x:p.x,y:p.y,z:levelOf(p)};}
   else if(!g.alert){const moving=squad(s).filter(p=>perceive(s,g,p)===1);if(moving.length){g.lastHeard=approximate(moving.sort((a,b)=>distance(g,a)-distance(g,b))[0]);g.searchSteps=12;}}}
  const contact=guards(s).some(g=>g.alert)||pending;
  if(['explore','won'].includes(s.phase)&&contact){s.phase='player';s.round++;s.queue=[];for(const u of s.units)u.ap=u.burningTurns?0:u.maxAp;log(s,'CONTACT / Squad turn. Movement costs 2 / 4 / 8 AP per tile: standing / kneeling / prone.');}
@@ -265,7 +288,7 @@ export function stepEnemy(s){
  const g=s.units[s.enemyIndex];
  if(!g){finishFireRound(s);s.phase='player';s.round++;for(const p of squad(s)){p.ap=p.burningTurns?0:p.maxAp;p.overwatch=null;settleStress(p,2);}refresh(s);log(s,`Squad turn / ${s.round}.`);return true;}
  if(g.team!=='guard'||!alive(g)||g.burningTurns>0||!g.alert||g.ap<1){s.enemyIndex++;return true;}
- const targets=squad(s).filter(p=>canSee(s,g,p)).sort((a,b)=>distance(g,a)-distance(g,b));
+ const targets=squad(s).filter(p=>notices(s,g,p)).sort((a,b)=>distance(g,a)-distance(g,b));
  const target=targets[0];if(target)g.lastKnown={x:target.x,y:target.y,z:levelOf(target)};
  const targetZone=target&&['torso','head','legs','weapon'].find(zone=>previewAttack(s,g,target,false,zone).ok);
  if(targetZone){attack(s,g,target,false,true,targetZone);return true;}

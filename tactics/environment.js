@@ -26,7 +26,7 @@ Object.assign(EDGES,{
  'window-concrete':{solid:true,opaque:true,window:true,cover:25,art:'window-concrete'},'window-brick':{solid:true,opaque:true,window:true,cover:25,art:'window-brick'},'window-corrugated':{solid:true,opaque:true,window:true,cover:25,art:'window-corrugated'},
  'door-steel-closed':{solid:true,opaque:true,cover:25,art:'door-steel-closed'},'door-wood-closed':{solid:true,opaque:true,cover:25,art:'door-wood-closed'},'doorway-concrete-open':{solid:false,opaque:false,cover:0,art:'doorway-concrete-open'}
 });
-export const floorTerrain=t=>['floor','yard','bridge',...GROUNDS].includes(t);
+export const floorTerrain=t=>['floor','yard','bridge','woodland',...GROUNDS].includes(t);
 export function propCells(p){const rule=PROPS[p.kind];if(!rule)return [];const w=p.rotated?rule.h:rule.w,h=p.rotated?rule.w:rule.h;return Array.from({length:w*h},(_,i)=>({x:p.x+i%w,y:p.y+Math.floor(i/w),z:p.z??0}));}
 const indexes=new WeakMap();
 export function propAt(m,x,y,z=0){const props=m.props;if(!props)return undefined;let index=indexes.get(props);if(!index){index=new Map();for(const p of props)for(const q of propCells(p))index.set(`${q.x},${q.y},${q.z}`,p);indexes.set(props,index);}return index.get(`${x},${y},${z}`);}
