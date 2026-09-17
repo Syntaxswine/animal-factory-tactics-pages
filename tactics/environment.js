@@ -32,3 +32,6 @@ const indexes=new WeakMap();
 export function propAt(m,x,y,z=0){const props=m.props;if(!props)return undefined;let index=indexes.get(props);if(!index){index=new Map();for(const p of props)for(const q of propCells(p))index.set(`${q.x},${q.y},${q.z}`,p);indexes.set(props,index);}return index.get(`${x},${y},${z}`);}
 export const propBlocks=(m,x,y,z=0)=>!!PROPS[propAt(m,x,y,z)?.kind]?.solid;
 export const propTall=(m,x,y,z=0)=>!!PROPS[propAt(m,x,y,z)?.kind]?.tall;
+
+// Unlocked doors stay solid to shots until a character opens them while crossing.
+for(const kind of ['door-steel-closed','door-wood-closed','jail-door-closed'])EDGES[kind].opensTo='doorway-concrete-open';

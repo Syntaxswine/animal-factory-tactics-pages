@@ -13,6 +13,7 @@ export function setTerrain(m,x,y,z,value){if(!inBounds(x,y,z))return false;if(!z
 export const passable=(m,p)=>floorTerrain(terrainAt(m,p.x,p.y,levelOf(p)))&&!propBlocks(m,p.x,p.y,levelOf(p));
 export function edgeBetween(a,b){if(levelOf(a)!==levelOf(b)||Math.abs(a.x-b.x)+Math.abs(a.y-b.y)!==1)return null;return a.x!==b.x?edgeKey('e',Math.min(a.x,b.x),a.y,levelOf(a)):edgeKey('s',a.x,Math.min(a.y,b.y),levelOf(a));}
 export function blockedEdge(m,a,b){const k=edgeBetween(a,b);return !k||!!EDGES[m.edges?.[k]]?.solid;}
+export function openDoorBetween(m,a,b){const k=edgeBetween(a,b),next=EDGES[m.edges?.[k]]?.opensTo;if(!next)return false;m.edges[k]=next;return true;}
 export function sightEdge(m,a,b,{height=1.3,offset=.5}={}){const k=edgeBetween(a,b);if(!k)return true;const rule=EDGES[m.edges?.[k]];if(rule?.window)return !(height>=1&&height<=2.4&&offset>=.15&&offset<=.85);return !!rule?.opaque;}
 export function edgeCells(k){const [axis,xs,ys,zs]=k.split(':'),x=Number(xs),y=Number(ys),z=Number(zs||0);return [{x,y,z},{x:x+(axis==='e'?1:0),y:y+(axis==='s'?1:0),z}];}
 export function edgePoints(k){const [axis,xs,ys,zs]=k.split(':'),x=Number(xs),y=Number(ys),z=Number(zs||0);return axis==='e'?[{x:x+.5,y:y-.5,z},{x:x+.5,y:y+.5,z}]:[{x:x-.5,y:y+.5,z},{x:x+.5,y:y+.5,z}];}
@@ -21,7 +22,7 @@ export const stairKey=(x,y,z)=>`${x},${y},${z}`;
 export function stairSet(m){return new Map((m.stairs||[]).map(p=>[stairKey(p.x,p.y,p.z),p.kind==='ladder'?3:2]));}
 export function neighbors(m,p,stairs=stairSet(m),includeDiagonals=true){
  const z=levelOf(p),out=[];
- for(const b of [{x:p.x+1,y:p.y,z},{x:p.x-1,y:p.y,z},{x:p.x,y:p.y+1,z},{x:p.x,y:p.y-1,z}])if(passable(m,b)&&!blockedEdge(m,p,b))out.push({...b,cost:1});
+ for(const b of [{x:p.x+1,y:p.y,z},{x:p.x-1,y:p.y,z},{x:p.x,y:p.y+1,z},{x:p.x,y:p.y-1,z}])if(passable(m,b)&&(!blockedEdge(m,p,b)||EDGES[m.edges?.[edgeBetween(p,b)]]?.opensTo))out.push({...b,cost:1});
  if(includeDiagonals)for(const dx of [-1,1])for(const dy of [-1,1]){const a={x:p.x+dx,y:p.y,z},b={x:p.x,y:p.y+dy,z},q={x:p.x+dx,y:p.y+dy,z};if(passable(m,a)&&passable(m,b)&&passable(m,q)&&!blockedEdge(m,p,a)&&!blockedEdge(m,p,b)&&!blockedEdge(m,a,q)&&!blockedEdge(m,b,q))out.push({...q,cost:1.5});}
  for(const dz of [-1,1])if(stairs.has(stairKey(p.x,p.y,Math.min(z,z+dz)))&&passable(m,{x:p.x,y:p.y,z:z+dz}))out.push({x:p.x,y:p.y,z:z+dz,cost:stairs.get(stairKey(p.x,p.y,Math.min(z,z+dz)))});for(const link of roofNeighbors(m,p))out.push(link);return out;
 }

@@ -8,7 +8,7 @@ export {inCone,headingTo,bearingOffset,sightOf,identifyRange,detectRange,acuity,
 import {terrainVisibility,TERRAIN_RANGE,CHARACTER_RANGE} from './visibility.js';
 export {TERRAIN_RANGE,CHARACTER_RANGE} from './visibility.js';
 import {PROPS,EDGES,propAt,propTall,propCells} from './environment.js';
-import {W,H,factoryMap,validateMap,blockedEdge,levelOf,tileKey,terrainAt,neighbors,stairSet,canStep,LEVELS,passable,sightEdge,edgeBetween,edgeCells,inBounds} from './maps.js';
+import {W,H,factoryMap,validateMap,openDoorBetween,blockedEdge,levelOf,tileKey,terrainAt,neighbors,stairSet,canStep,LEVELS,passable,sightEdge,edgeBetween,edgeCells,inBounds} from './maps.js';
 export {W,H} from './maps.js';
 export const WEAPONS={
  hands:{name:'Workers’ fists',short:'Hands',cost:3,range:1,damage:16,mag:0},
@@ -128,7 +128,7 @@ export function stepMovement(s){
  if(!s.queue.length||!['explore','player','won'].includes(s.phase))return false;
  if(s.queue[0].group)return stepGroupMovement(s);
  let step=s.queue[0];const actor=s.units[step.id];if(step.goal&&canControl(s,actor)){const goal=step.goal,path=navigationPath(s,actor,goal.x,goal.y,goal.z);if(!path?.length){s.queue=[];log(s,'Route stopped: destination reached or no discovered route remains.');return false;}s.queue=path.map(p=>({id:actor.id,...p,goal}));}step=s.queue.shift();const u=s.units[step.id],currentStep=u&&movementNeighbors(s,u).find(p=>p.x===step.x&&p.y===step.y&&p.z===levelOf(step));if(!canControl(s,u)||!currentStep||occupant(s,step.x,step.y,levelOf(step))||(s.phase==='player'&&u.ap<currentStep.cost)){s.queue=[];return false;}
- u.heading=headingTo(u,step);u.facing=(step.x-u.x)-(step.y-u.y)>=0?1:-1;u.x=step.x;u.y=step.y;u.z=levelOf(step);u.steps++;u.overwatch=null;emitNoise(s,u,u.sneaking?3:10);if(s.phase==='player')u.ap-=currentStep.cost;enterFire(s,u);refresh(s);return true;
+ openDoorBetween(s,u,step);u.heading=headingTo(u,step);u.facing=(step.x-u.x)-(step.y-u.y)>=0?1:-1;u.x=step.x;u.y=step.y;u.z=levelOf(step);u.steps++;u.overwatch=null;emitNoise(s,u,u.sneaking?3:10);if(s.phase==='player')u.ap-=currentStep.cost;enterFire(s,u);refresh(s);return true;
 }
 export function coverAgainst(s,a,b){
  const occupied=PROPS[propAt(s,b.x,b.y,levelOf(b))?.kind];
@@ -174,7 +174,7 @@ function panicRun(s,u){
   const choices=movementNeighbors(s,u).filter(p=>levelOf(p)===levelOf(u)&&!occupant(s,p.x,p.y,p.z));
   if(!choices.length)break;
   choices.sort((a,b)=>Math.cos((headingTo(u,b)-heading)*Math.PI/180)-Math.cos((headingTo(u,a)-heading)*Math.PI/180));
-  const p=choices[0];u.heading=headingTo(u,p);u.facing=(p.x-u.x)-(p.y-u.y)>=0?1:-1;u.x=p.x;u.y=p.y;u.steps++;emitNoise(s,u,15);
+  const p=choices[0];openDoorBetween(s,u,p);u.heading=headingTo(u,p);u.facing=(p.x-u.x)-(p.y-u.y)>=0?1:-1;u.x=p.x;u.y=p.y;u.steps++;emitNoise(s,u,15);
  }
  u.ap=0;u.fireActedRound=s.round;
  log(s,u.name+' runs in panic / '+u.burningTurns+' turns of fire.');
@@ -272,7 +272,7 @@ export function stepEnemy(s){
  if(target&&previewAttack(s,g,target).reason==='Not enough AP'){g.ap=0;s.enemyIndex++;return true;}
  if(WEAPONS[g.weapon].mag&&g.ammo[g.weapon]===0&&reload(s,g,true))return true;
  const dest=g.lastKnown;if(!dest){g.heading=(g.heading+45)%360;s.enemyIndex++;refresh(s);return true;}if(dest&&!inCone(g,dest)){g.heading=headingTo(g,dest);refresh(s);return true;}if(dest){let best=null;for(const q of neighbors(s,dest)){if(!WEAPONS[g.weapon].mag&&distance(q,dest)>WEAPONS[g.weapon].range)continue;const path=pathTo(s,g,q.x,q.y,q.z);if(path?.length&&(!best||pathCost(path)<pathCost(best)))best=path;}
-  if(best&&best[0].cost<=g.ap){const p=best[0];g.heading=headingTo(g,p);g.facing=(p.x-g.x)-(p.y-g.y)>=0?1:-1;g.x=p.x;g.y=p.y;g.z=levelOf(p);g.steps++;g.ap-=p.cost;enterFire(s,g);refresh(s);resolveOverwatch(s,g);return true;}}
+  if(best&&best[0].cost<=g.ap){const p=best[0];openDoorBetween(s,g,p);g.heading=headingTo(g,p);g.facing=(p.x-g.x)-(p.y-g.y)>=0?1:-1;g.x=p.x;g.y=p.y;g.z=levelOf(p);g.steps++;g.ap-=p.cost;enterFire(s,g);refresh(s);resolveOverwatch(s,g);return true;}}
  g.ap=0;s.enemyIndex++;return true;
 }
 
@@ -291,7 +291,7 @@ export function moveGroup(s,ids,leader,x,y,z=levelOf(leader)){
  for(const u of members){const gx=u.x+dx,gy=u.y+dy,candidates=[];for(let oy=-2;oy<=2;oy++)for(let ox=-2;ox<=2;ox++)candidates.push({x:gx+ox,y:gy+oy,z,d:ox*ox+oy*oy});candidates.sort((a,b)=>a.d-b.d);let found=null;for(const goal of candidates){if(reserved.has(key(goal.x,goal.y,z)))continue;const path=inBounds(goal.x,goal.y,z)?pathTo(planning,u,goal.x,goal.y,z):null;if(path&&(path.length||u.x===goal.x&&u.y===goal.y&&levelOf(u)===z)){if(s.phase==='player'&&path.length&&path[0].cost>u.ap)continue;found=goal;break;}}if(!found)return false;reserved.add(key(found.x,found.y,z));orders.push({id:u.id,goal:{x:found.x,y:found.y,z}});}
  if(orders.every(o=>{const u=s.units[o.id];return u.x===o.goal.x&&u.y===o.goal.y&&levelOf(u)===z;}))return false;for(const u of members)u.overwatch=null;s.queue=[{group:orders}];log(s,'Group movement ordered for '+orders.length+' comrades.');return true;
 }
-function stepGroupMovement(s){const order=s.queue[0];let moved=false;for(const entry of order.group){const u=s.units[entry.id],goal=entry.goal;if(!canControl(s,u)){s.queue=[];return moved;}if(u.x===goal.x&&u.y===goal.y&&levelOf(u)===goal.z)continue;const path=navigationPath(s,u,goal.x,goal.y,goal.z),step=path?.[0],valid=step&&movementNeighbors(s,u).find(p=>p.x===step.x&&p.y===step.y&&p.z===step.z);if(!valid||occupant(s,step.x,step.y,step.z)||(s.phase==='player'&&u.ap<valid.cost)){s.queue=[];log(s,'Group stopped: route blocked or a comrade lacks AP.');return moved;}u.heading=headingTo(u,step);u.facing=(step.x-u.x)-(step.y-u.y)>=0?1:-1;u.x=step.x;u.y=step.y;u.z=step.z;u.steps++;u.overwatch=null;emitNoise(s,u,u.sneaking?3:10);if(s.phase==='player')u.ap-=valid.cost;enterFire(s,u);moved=true;refresh(s);if(s.queue[0]!==order)return moved;}
+function stepGroupMovement(s){const order=s.queue[0];let moved=false;for(const entry of order.group){const u=s.units[entry.id],goal=entry.goal;if(!canControl(s,u)){s.queue=[];return moved;}if(u.x===goal.x&&u.y===goal.y&&levelOf(u)===goal.z)continue;const path=navigationPath(s,u,goal.x,goal.y,goal.z),step=path?.[0],valid=step&&movementNeighbors(s,u).find(p=>p.x===step.x&&p.y===step.y&&p.z===step.z);if(!valid||occupant(s,step.x,step.y,step.z)||(s.phase==='player'&&u.ap<valid.cost)){s.queue=[];log(s,'Group stopped: route blocked or a comrade lacks AP.');return moved;}openDoorBetween(s,u,step);u.heading=headingTo(u,step);u.facing=(step.x-u.x)-(step.y-u.y)>=0?1:-1;u.x=step.x;u.y=step.y;u.z=step.z;u.steps++;u.overwatch=null;emitNoise(s,u,u.sneaking?3:10);if(s.phase==='player')u.ap-=valid.cost;enterFire(s,u);moved=true;refresh(s);if(s.queue[0]!==order)return moved;}
  if(order.group.every(e=>{const u=s.units[e.id];return u.x===e.goal.x&&u.y===e.goal.y&&levelOf(u)===e.goal.z;}))s.queue=[];return moved;
 }
 
