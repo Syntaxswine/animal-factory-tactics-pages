@@ -220,7 +220,7 @@ function explodeTanks(s,wearer,source=null){
 }
 export function attack(s,a,b,burst=false,byAI=false,zone='torso',reaction=false){
  if(s.queue.length)return false;
- if(reaction?!(s.phase==='enemy'&&a?.team==='squad'&&alive(a)&&!a.burningTurns&&a.overwatch?.weapon===a.weapon&&a.overwatch.heading===a.heading&&!burst&&zone==='torso'&&canSee(s,a,b)):byAI?!(s.phase==='enemy'&&a?.team==='guard'&&alive(a)&&!a.burningTurns):!canControl(s,a))return false;
+ if(reaction?!(s.phase==='enemy'&&a?.team==='squad'&&alive(a)&&!a.burningTurns&&a.overwatch?.weapon===a.weapon&&a.overwatch.heading===a.heading&&!burst&&zone==='torso'&&withinOverwatch(a,b)&&canSee(s,a,b)):byAI?!(s.phase==='enemy'&&a?.team==='guard'&&alive(a)&&!a.burningTurns):!canControl(s,a))return false;
  const p=previewAttack(s,reaction?{...a,ap:WEAPONS[a.weapon].cost}:a,b,burst,zone);if(!p.ok)return false;a.overwatch=null;
  a.fired=true;
  // Orienting reflex: an attack from outside the victim's field spins it toward the attacker (turning is free).
@@ -328,7 +328,9 @@ const approximate=u=>({x:Math.max(0,Math.min(W-1,Math.round(u.x/6)*6)),y:Math.ma
 export function alarm(s,shooter,radius){for(const g of guards(s))if(g!==shooter&&!g.alert&&distance(g,shooter)<=radius){g.alert=true;g.lastKnown=approximate(shooter);}}
 export function emitNoise(s,u,radius){if(u.team!=='squad')return;for(const g of guards(s))if(!canSee(s,g,u)&&distance(g,u)<=radius){g.lastHeard=approximate(u);g.searchSteps=12;}}
 export function stepInvestigation(s){if(!['explore','won'].includes(s.phase))return false;for(const g of guards(s))if(g.lastHeard&&g.searchSteps>0){const dest=g.lastHeard;g.heading=headingTo(g,dest);const path=pathTo(s,g,dest.x,dest.y,dest.z);g.searchSteps--;if(path?.length){const p=path[0];g.x=p.x;g.y=p.y;g.z=p.z;g.steps++;}else g.searchSteps=0;if(!g.searchSteps)g.lastHeard=null;refresh(s);return true;}return false;}
-export function setOverwatch(s,u){if(!canControl(s,u)||s.phase!=='player'||s.queue.length||u.overwatch||!WEAPONS[u.weapon].mag||u.ammo[u.weapon]<1||u.ap<WEAPONS[u.weapon].cost)return false;u.ap-=WEAPONS[u.weapon].cost;u.overwatch={weapon:u.weapon,heading:u.heading};log(s,u.name+' reserved one overwatch shot.');return true;}
-export function resolveOverwatch(s,g){if(s.phase!=='enemy'||!alive(g))return;for(const u of squad(s)){const watch=u.overwatch;if(!watch)continue;if(watch.weapon!==u.weapon||watch.heading!==u.heading){u.overwatch=null;continue;}if(canSee(s,u,g)&&previewAttack(s,{...u,ap:WEAPONS[u.weapon].cost},g).ok){attack(s,u,g,false,false,'torso',true);if(!alive(g)||s.phase!=='enemy')break;}}}
+export const overwatchRange=u=>Math.max(1,Math.min(WEAPONS[u.weapon].range,u.overwatch?.range??u.watchRange??WEAPONS[u.weapon].range));
+export const withinOverwatch=(u,b)=>Math.hypot(u.x-b.x,u.y-b.y)+Math.max(0,levelOf(b)-levelOf(u))<=overwatchRange(u);
+export function setOverwatch(s,u,range=overwatchRange(u)){if(!Number.isFinite(range)||range<1||range>WEAPONS[u.weapon].range)return false;if(!canControl(s,u)||s.phase!=='player'||s.queue.length||u.overwatch||!WEAPONS[u.weapon].mag||u.ammo[u.weapon]<1||u.ap<WEAPONS[u.weapon].cost)return false;u.ap-=WEAPONS[u.weapon].cost;u.watchRange=range;u.overwatch={weapon:u.weapon,heading:u.heading,range};log(s,u.name+' reserved one overwatch shot.');return true;}
+export function resolveOverwatch(s,g){if(s.phase!=='enemy'||!alive(g))return;for(const u of squad(s)){const watch=u.overwatch;if(!watch)continue;if(watch.weapon!==u.weapon||watch.heading!==u.heading){u.overwatch=null;continue;}if(withinOverwatch(u,g)&&canSee(s,u,g)&&previewAttack(s,{...u,ap:WEAPONS[u.weapon].cost},g).ok){attack(s,u,g,false,false,'torso',true);if(!alive(g)||s.phase!=='enemy')break;}}}
 
 export function allocateSkill(s,u,skill){if(!canControl(s,u)||s.queue.length||!['explore','won'].includes(s.phase)||!train(u,skill))return false;log(s,u.name+' trained '+skill+'.');refresh(s);return true;}
