@@ -19,6 +19,7 @@ import {W,H,WEAPONS,overwatchRange,headingTo,arrangeInventory,stowWeapon,equipCu
 const $=id=>document.getElementById(id),canvas=$('map'),mainCtx=canvas.getContext('2d'),mini=$('mini').getContext('2d');
 let customMap=null,loadError='';
 if(new URLSearchParams(location.search).get('map')==='custom'){try{customMap=parseMap(sessionStorage.getItem('red-shift-playtest')||'');}catch(e){loadError='Could not load the playtest map. '+e.message;}}
+if(!customMap){try{const response=await fetch(new URL('./default-factory.json',import.meta.url));if(!response.ok)throw Error('HTTP '+response.status);customMap=parseMap(await response.text());}catch(e){loadError='Could not load the default factory map; showing the training template. '+e.message;}}
 let ctx=mainCtx,renderLevel=0;const compositeLayers=layerCompositor();
 let watchPreview=false,watchAim=false,showCone=false,bagSelection=null,inventoryMercId=null;
 let terrainAim=false,terrainTarget=null;
