@@ -986,6 +986,28 @@
         2,
         2
       ]
+    },
+    {
+      "id": "tree-broadleaf-large",
+      "file": "foliage/tree-broadleaf.png",
+      "label": "tree broadleaf large",
+      "kind": "prop",
+      "suggestedFootprint": [
+        1,
+        1
+      ],
+      "description": "Mature 1.8x variant of tree broadleaf. Reuses the source sprite at enlarged display size; shared hybrid model and collision proxies scale together. One trunk tile, overhanging canopy."
+    },
+    {
+      "id": "tree-pine-large",
+      "file": "foliage/tree-pine.png",
+      "label": "tree pine large",
+      "kind": "prop",
+      "suggestedFootprint": [
+        1,
+        1
+      ],
+      "description": "Mature 1.8x variant of tree pine. Reuses the source sprite at enlarged display size; shared hybrid model and collision proxies scale together. One trunk tile, overhanging canopy."
     }
   ]
 }

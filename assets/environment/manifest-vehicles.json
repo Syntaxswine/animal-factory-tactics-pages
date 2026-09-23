@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "group": "vehicles",
+  "label": "Vehicles",
+  "projection": "2:1 isometric props; overhead terrain textures",
+  "assets": []
+}

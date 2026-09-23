@@ -1,4 +1,5 @@
 // Explicit game rules for the supplied environment art. Manifest prose is not executable.
+import {GROUP_PROPS} from './environment-groups.js';
 export const GROUNDS=['ground-dirt','ground-gravel','ground-grass','ground-concrete','ground-asphalt','ground-tiles'];
 export const PROPS={
  'crate-wood':{w:1,h:1,cover:25,solid:true},'crate-steel':{w:1,h:1,cover:25,solid:true},'crate-stack':{w:1,h:1,cover:25,solid:true,tall:true},
@@ -14,6 +15,11 @@ for(const kind of ['botanical-chamber','medicine-cabinet'])PROPS[kind]={w:1,h:1,
 PROPS['iv-stand']={w:1,h:1,cover:0,solid:true,visualHeight:60};
 // Trees occupy one trunk tile; their canopies overhang neighboring tiles.
 for(const kind of ['tree-broadleaf','tree-pine'])PROPS[kind]={w:1,h:1,cover:25,solid:true,tall:true,visualWidth:100,visualHeight:130};
+export const TREE_VARIANTS={
+ 'tree-broadleaf-large':{base:'tree-broadleaf',scale:1.8},
+ 'tree-pine-large':{base:'tree-pine',scale:1.8}
+};
+for(const [kind,{base,scale}]of Object.entries(TREE_VARIANTS))PROPS[kind]={...PROPS[base],visualWidth:100*scale,visualHeight:130*scale};
 PROPS.bush={w:1,h:1,cover:25,solid:false,visualHeight:32};
 PROPS.reeds={w:1,h:1,cover:0,solid:false,visualHeight:48};
 // Whole walkable roof modules, drawn underneath actors on an existing supported level.
@@ -35,3 +41,6 @@ export const propTall=(m,x,y,z=0)=>!!PROPS[propAt(m,x,y,z)?.kind]?.tall;
 
 // Unlocked doors stay solid to shots until a character opens them while crossing.
 for(const kind of ['door-steel-closed','door-wood-closed','jail-door-closed'])EDGES[kind].opensTo='doorway-concrete-open';
+
+// Scenery groups register their own kinds; see environment-groups.js. No-op while they are empty.
+Object.assign(PROPS,GROUP_PROPS);

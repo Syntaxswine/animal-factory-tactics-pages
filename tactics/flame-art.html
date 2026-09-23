@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flamethrower fire · Animal Factory Tactics</title>
+<style>
+body{margin:0;background:#26372e;color:#f5e6c9;font:16px system-ui}header{padding:20px 24px;background:#1a2923;border-bottom:1px solid #65705a}h1{margin:0 0 12px;font-size:24px}nav{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center}select,button{font:inherit;padding:5px 8px;background:#f5e6c9;color:#26372e;border:0;border-radius:3px}button{cursor:pointer;min-width:84px}input[type=range]{accent-color:#f4c878}a{color:#f4c878}#note{margin:12px 0 0;color:#c4cbb9;font-size:14px}main{padding:16px 24px}#stage{display:block;width:100%;height:min(62vh,560px);background:#202c29;border:1px solid #63755f;border-radius:6px}#scrub-row{display:flex;gap:12px;align-items:center;margin:12px 0}#scrub{flex:1}#time{font:14px monospace;min-width:92px;text-align:right}#stage.sheet{height:min(78vh,760px)}[data-scene][hidden]{display:none!important}@media(max-width:440px){header,main{padding-left:12px;padding-right:12px}}
+</style>
+<header>
+ <h1>Flamethrower fire</h1>
+ <nav>
+  <label>Scene <select id="scene"><option value="burst">Flamethrower burst</option><option value="ground">Burning ground</option></select></label>
+  <label>Animal <select id="species"></select></label>
+  <label>Uniform <select id="outfit"><option value="normal">Original</option><option value="red-hats">Red Hats</option></select></label>
+  <label>Stance <select id="stance"><option>standing</option><option>kneeling</option><option>prone</option></select></label>
+  <label data-scene="burst">Outcome <select id="outcome"><option value="kill">Hit · burned down</option><option value="hit">Hit · survives</option><option value="miss">Miss</option></select></label>
+  <label data-scene="burst">Range <select id="range"></select></label>
+  <label data-scene="burst">Toward <select id="toward"></select></label>
+  <label data-scene="ground">Rounds left <select id="turns"><option value="3">3 · fresh</option><option value="2">2</option><option value="1">1 · dying</option></select></label>
+  <label>Zoom <select id="zoom"><option value="1.15">1.15 · game default</option><option value="2">2</option><option value="2.3" selected>2.3 · game maximum</option><option value="4">4 · close-up</option></select></label>
+  <label>Speed <select id="speed"><option value="1">1×</option><option value="0.5">½×</option><option value="0.25">¼×</option></select></label>
+  <label><input id="filmstrip" type="checkbox"> Filmstrip</label>
+  <a href="weapon-expansion.html?weapon=flamethrower">Flamethrower sprites</a>
+ </nav>
+ <p id="note"></p>
+</header>
+<main>
+ <canvas id="stage"></canvas>
+ <div id="scrub-row"><button id="play">Pause</button><input id="scrub" type="range" min="0" max="1250" step="10" value="0" aria-label="Time"><span id="time">0 ms</span></div>
+</main>
+<script type="module" src="./flame-art-review.js"></script>
+</html>

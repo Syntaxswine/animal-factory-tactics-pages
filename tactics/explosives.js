@@ -53,6 +53,6 @@ export function detonate(s,impact,w){
  // Near surfaces breach first. Floors and surviving structures shield the space beyond.
  for(const c of candidates.sort((a,b)=>a.dist-b.dist))if(blastClear(s,impact,c.point)){c.remove();destroyed++;}
  const hits=[];
- for(const u of s.units){if(!(u.hp>0||['bleeding','stable'].includes(u.casualty)))continue;const point={x:u.x,y:u.y,h:levelOf(u)*3+.8},dist=Math.hypot(u.x-impact.x,u.y-impact.y,point.h-impact.h);if(dist<radius&&blastClear(s,impact,point))hits.push({unit:u,damage:Math.max(1,Math.round(w.damage*(1-dist/radius)))});}
+ for(const u of s.units){if(u.away||u.casualty==='quit'||!(u.hp>0||['bleeding','stable'].includes(u.casualty)))continue;/* away: crossed the map edge; quit: left the squad; no body here */const point={x:u.x,y:u.y,h:levelOf(u)*3+.8},dist=Math.hypot(u.x-impact.x,u.y-impact.y,point.h-impact.h);if(dist<radius&&blastClear(s,impact,point))hits.push({unit:u,damage:Math.max(1,Math.round(w.damage*(1-dist/radius)))});}
  return {hits,blast:{x:impact.x,y:impact.y,z:impact.z,radius,destroyed}};
 }

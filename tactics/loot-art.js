@@ -8,6 +8,8 @@ export function inventoryArt(item){
  return id?`../assets/environment/loot/${id}.png`:null;
 }
 export function drawLootPile(ctx,load,pile,point,zoom){
+ // An unsearched body shows nothing of what it holds; the corpse itself is drawn by the actor pass.
+ if(pile.body!==undefined&&!pile.searched)return true;
  const sprites=[...new Set(pile.items.map(inventoryArt).filter(Boolean))];
  let drawn=false;
  for(const [i,src] of sprites.entries()){

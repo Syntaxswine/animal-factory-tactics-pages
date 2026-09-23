@@ -1,4 +1,4 @@
-import {alive,canControl,cutPreview,stabilizePreview,previewAttack,pathCost,WEAPONS,groundTarget} from './engine.js';
+import {alive,canControl,cutPreview,stabilizePreview,searchPreview,pileContents,previewAttack,pathCost,WEAPONS,groundTarget} from './engine.js';
 import {blockedEdge,edgeCells,edgeKey,levelOf,tileKey} from './maps.js';
 
 // Small vector cursors stay sharp and use explicit hotspots for precise tile/edge picking.
@@ -24,7 +24,9 @@ export function contextAction(s,u,{actorId=null,point=null,edge=null}={}){
   const patient=s.units.find(p=>same(p)&&p.team==='squad'&&p.casualty==='bleeding');
   if(patient)return {kind:'interact',action:'stabilize',id:patient.id,label:'Stabilize '+patient.name};
   const near=levelOf(u)===levelOf(point)&&Math.abs(u.x-point.x)+Math.abs(u.y-point.y)<=1;
-  if(near&&(same(u)||!blockedEdge(s,u,point))&&s.loot.some(p=>same(p)&&p.items.length))return {kind:'interact',action:'loot',label:'Inspect supplies · open inventory'};
+  const body=s.loot.find(p=>same(p)&&p.body!==undefined&&!p.searched);
+  if(body&&near&&(same(u)||!blockedEdge(s,u,point)))return {kind:'interact',action:'search',id:body.body,label:'Search body'};
+  if(near&&(same(u)||!blockedEdge(s,u,point))&&s.loot.some(p=>same(p)&&pileContents(p).length))return {kind:'interact',action:'loot',label:'Inspect supplies · open inventory'};
   if(s.definition.exits.some(same)&&levelOf(u)===levelOf(point)&&Math.hypot(u.x-point.x,u.y-point.y)<=2)return {kind:'interact',action:'travel',label:'Open overmap'};
  }
  return {kind:'walk',action:'move'};
@@ -50,6 +52,7 @@ export function actionCost(s,u,action,{route=null,burst=false,aimZone='torso'}={
   if(!route?.length)return result(null,'No route');
   return result(cost,!free&&cost>u.ap?'Not enough AP':'',route.some(p=>!s.seen.has(tileKey(p.x,p.y,levelOf(p)))));
  }
+ if(action.action==='search'){const p=searchPreview(s,u,s.loot.find(p=>p.body===action.id));return result(p.cost,p.reason);}
  if(['loot','travel'].includes(action.action))return result(0,!canControl(s,u)||s.queue.length?'Cannot act now':'');
  return result(null,'Cannot act now');
 }

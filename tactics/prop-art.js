@@ -331,6 +331,24 @@ export const PROP_ART = {
       1146
     ]
   },
+  "tree-broadleaf-large": {
+    "file": "foliage/tree-broadleaf.png",
+    "crop": [
+      93,
+      62,
+      1176,
+      1194
+    ]
+  },
+  "tree-pine-large": {
+    "file": "foliage/tree-pine.png",
+    "crop": [
+      292,
+      16,
+      1019,
+      1205
+    ]
+  },
   "roof-corrugated-flat": {
     "file": "roof-corrugated-flat.png",
     "crop": [

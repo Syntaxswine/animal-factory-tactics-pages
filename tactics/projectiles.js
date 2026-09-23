@@ -16,7 +16,7 @@ export function traceProjectile(state,shooter,origin,direction,reach){
  const d={x:direction.x/length,y:direction.y/length,h:direction.h/length};
  let nearest=null,limit=reach;
  for(const unit of state.units){
-  if(unit===shooter||!(unit.hp>0||['bleeding','stable'].includes(unit.casualty)))continue;
+  if(unit===shooter||unit.away||unit.casualty==='quit'||!(unit.hp>0||['bleeding','stable'].includes(unit.casualty)))continue; // a unit that crossed the map edge (away) or quit the squad (G5) has no body here
   const ox=origin.x-unit.x,oy=origin.y-unit.y,a=d.x*d.x+d.y*d.y,b=2*(ox*d.x+oy*d.y),c=ox*ox+oy*oy-.34*.34;
   let horizontal;
   if(a<EPS){if(c>0)continue;horizontal=[0,reach];}
