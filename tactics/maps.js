@@ -1,4 +1,5 @@
 import {validatePlannedMap} from './feature-plan.js';
+import {MINUTES_PER_DAY,DEFAULT_START_MINUTES} from './daylight.js';
 import {validateConnections} from './connections.js';
 import {GROUNDS,PROPS,EDGES,floorTerrain,propAt,propCells,propBlocks} from './environment.js';
 import {generateSectorPlan,validateSectorPlan} from './sector-rules.js';
@@ -68,6 +69,8 @@ export function validateMap(raw,{connectivity=true}={}){
  const errors=[],point=p=>p&&inBounds(p.x,p.y,levelOf(p));
  if(!raw||raw.version!==2||raw.width!==W||raw.height!==H||raw.levels!==LEVELS)return ['Expected a version 2 map: 240 × 240 tiles and 3 levels.'];
  if(typeof raw.name!=='string'||raw.name.length<1||raw.name.length>60)errors.push('Map name must contain 1–60 characters.');
+ // Optional start time, shared with the 3D editor. Absent means the campaign default of 08:00.
+ if(raw.time!==undefined&&(typeof raw.time!=='object'||raw.time===null||Array.isArray(raw.time)||!Number.isInteger(raw.time.startMinutes)||raw.time.startMinutes<0||raw.time.startMinutes>=MINUTES_PER_DAY))errors.push('Map start time must be a whole number of minutes from 0 to 1439.');
  if(!Array.isArray(raw.terrain)||raw.terrain.length!==H||raw.terrain.some(r=>!Array.isArray(r)||r.length!==W||r.some(t=>!['yard','floor','crate','void','water','bridge','woodland',...GROUNDS].includes(t))))return [...errors,'Invalid ground terrain.'];
  if(!Array.isArray(raw.upper)||raw.upper.length!==2)return [...errors,'Expected two sparse upper levels.'];
  for(const layer of raw.upper){if(!layer||typeof layer!=='object'||Array.isArray(layer))return [...errors,'Invalid upper floor.'];for(const [k,v]of Object.entries(layer)){const [x,y]=k.split(',').map(Number);if(k!==tileKey(x,y)||!inBounds(x,y)||!['yard','floor','crate','bridge','woodland',...GROUNDS].includes(v))return [...errors,'Invalid upper floor tile.'];}}
@@ -117,3 +120,6 @@ export function generateRiverMap(seed=7,name='River / two bridges',population=MA
  for(let i=0;i<Math.min(MAX_GUARDS,Math.max(0,population));i++){const p=sites[(i*17+7)%sites.length];m.guards.push({...p,z:0,species:SPECIES[i%SPECIES.length],weapon:['pistol','rifle','knife','assault'][i%4],outfit:'red-hats'});}
  return m;
 }
+
+// The minute of day a map opens at: its authored start time, or the campaign default.
+export const mapStartMinutes=m=>m?.time?.startMinutes??DEFAULT_START_MINUTES;

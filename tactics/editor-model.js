@@ -1,9 +1,18 @@
 import {GROUNDS,PROPS,EDGES,propAt,propCells,floorTerrain} from './environment.js';
+import {MINUTES_PER_DAY} from './daylight.js';
 import {W,H,stampRoom,tileKey,levelOf,terrainAt,setTerrain,addStairs,MAX_GUARDS,roofTop,roofValid,roofEndpoint,edgeCells,passable,blockedEdge,inBounds} from './maps.js';
 export function createEditor(map){return {map:structuredClone(map),undo:[],redo:[],before:null};}
 export function beginStroke(editor){if(!editor.before)editor.before=structuredClone(editor.map);}
 export function endStroke(editor){if(!editor.before)return false;const before=editor.before;editor.before=null;if(JSON.stringify(before)===JSON.stringify(editor.map))return false;editor.undo.push(before);if(editor.undo.length>50)editor.undo.shift();editor.redo=[];return true;}
 export function replaceMap(editor,map){beginStroke(editor);editor.map=structuredClone(map);endStroke(editor);}
+// The minute of day the map opens at, as one undoable edit. Pass null to clear it back to the
+// campaign default. Rejects anything the map schema would reject rather than storing it.
+export function setStartTime(editor,minutes){
+ if(minutes!==null&&(!Number.isInteger(minutes)||minutes<0||minutes>=MINUTES_PER_DAY))return false;
+ beginStroke(editor);
+ if(minutes===null)delete editor.map.time;else editor.map.time={...editor.map.time,startMinutes:minutes};
+ return endStroke(editor);
+}
 export function undo(editor){endStroke(editor);if(!editor.undo.length)return false;editor.redo.push(editor.map);editor.map=editor.undo.pop();return true;}
 export function redo(editor){endStroke(editor);if(!editor.redo.length)return false;editor.undo.push(editor.map);editor.map=editor.redo.pop();return true;}
 export function applyBrush(editor,tool,x,y,edge,options={}) {

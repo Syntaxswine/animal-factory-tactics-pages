@@ -1,7 +1,8 @@
 import {restStrain,driftBonds} from './personalities.js';
+import {daylightPhase,PHASE_LABELS} from './daylight.js';
 import {settleHappiness} from './happiness.js';
 import {quitMerc} from './engine.js';
-import {factoryMap,generateMap,blockedEdge,tileKey,levelOf,neighbors,W,H} from './maps.js';
+import {factoryMap,generateMap,blockedEdge,tileKey,levelOf,neighbors,mapStartMinutes,W,H} from './maps.js';
 import {createGame,squad,guards,alive,incapacitated,canControl,abandonCasualties,occupant,refresh,walkable,log,STANCES,stanceOf,emitNoise,enterFire,combatCosts,settleGuards,spawnUnit,unit,WEAPONS} from './engine.js';
 import {initInventory} from './inventory.js';
 import {initProgression} from './progression.js';
@@ -14,7 +15,7 @@ export const BORDER=3,SIDES={north:{dx:0,dy:-1},east:{dx:1,dy:0},south:{dx:0,dy:
 export function linksFrom(positions){const ids=Object.keys(positions),links=[];for(const a of ids)for(const b of ids)if(a<b&&Math.abs(positions[a].x-positions[b].x)+Math.abs(positions[a].y-positions[b].y)===1)links.push([a,b]);return links;}
 export function createWorld(custom=null,difficulty='standard',rosterSeed=1947) {
   const positions={factory:{x:0,y:0},yard:{x:1,y:0},annex:{x:2,y:0}};
-  return {difficulty,current:'factory',start:'factory',clock:{minutes:480,incomeRemainder:0},money:0,journeys:0,lastIncome:0,locations:{factory:{type:'factory'},yard:{type:'yard'},annex:{type:'factory'}},definitions:{factory:custom||factoryMap(),yard:generateMap(83,'Freight yard'),annex:generateMap(126,'Outer factory')},rosterSeed,nextId:MERC_ID_BASE,hired:[],states:{factory:createGame(1947,custom||factoryMap(),true,difficulty,{social:true,rosterSeed})},positions,links:linksFrom(positions)};
+  return {difficulty,current:'factory',start:'factory',clock:{minutes:mapStartMinutes(custom),incomeRemainder:0},money:0,journeys:0,lastIncome:0,locations:{factory:{type:'factory'},yard:{type:'yard'},annex:{type:'factory'}},definitions:{factory:custom||factoryMap(),yard:generateMap(83,'Freight yard'),annex:generateMap(126,'Outer factory')},rosterSeed,nextId:MERC_ID_BASE,hired:[],states:{factory:createGame(1947,custom||factoryMap(),true,difficulty,{social:true,rosterSeed})},positions,links:linksFrom(positions)};
 }
 export const currentMap=world=>world.states[world.current];
 // Shortest overmap route from the original starting tile, never from the squad.
@@ -31,6 +32,9 @@ export function factoryIncome(world,id){
 export const liberated=(world,id)=>world.states[id]?.phase==='won';
 export const incomePerHour=world=>Object.keys(world.definitions).reduce((sum,id)=>sum+(liberated(world,id)?factoryIncome(world,id):0),0);
 export function clockLabel(world){const minutes=Math.floor(world.clock.minutes);return `Day ${Math.floor(minutes/1440)+1} · ${String(Math.floor(minutes/60)%24).padStart(2,'0')}:${String(minutes%60).padStart(2,'0')}`;}
+// The phase of the day the campaign clock is in, for the readout. daylight.js owns the schedule.
+export const worldPhase=world=>daylightPhase(world.clock.minutes);
+export const worldPhaseLabel=world=>PHASE_LABELS[worldPhase(world)];
 // Every elapsed interval uses the same clock and production calculation.
 export function advanceTime(world,minutes){
  if(!Number.isFinite(minutes)||minutes<=0)return 0;

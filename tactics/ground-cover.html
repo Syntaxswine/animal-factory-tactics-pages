@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Animal Factory Tactics — ground cover</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#19231e;color:#eee9db;font:15px/1.5 system-ui}main{max-width:1400px;margin:auto;padding:36px 28px}.eyebrow{color:#b9bc94;letter-spacing:.16em;font-size:12px}h1{font-size:clamp(30px,5vw,54px);line-height:1.1;margin:12px 0}header p{max-width:760px;color:#b9c0af}a{color:#ead3a2}nav{display:flex;flex-wrap:wrap;gap:16px;padding:22px 0;align-items:center}label{display:flex;align-items:center;gap:8px}select,input{font:inherit;color:inherit;background:#2d382d;border:1px solid #68725c;padding:6px;border-radius:4px}canvas{display:block;width:100%;height:auto;border:1px solid #4e5c48;border-radius:6px;background:#202c29}h2{font-size:19px;margin:30px 0 6px}.note{color:#b9c0af;font-size:13px;margin-top:10px;max-width:900px}dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 18px;font-size:13px;color:#b9c0af;max-width:900px}dt{color:#e4d9ba}a:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #e9d49a;outline-offset:3px}
+</style></head><body><main>
+<header><div class="eyebrow">ANIMAL FACTORY TACTICS / GROUND COVER</div><h1>Grass, and what grows under the trees.</h1>
+<p>Parcel K of the scenery port: low tufts on open ground and waist-high undergrowth in woodland, drawn on the <code>dressing</code> pass under the props. Placement is the 3D branch's hash, so a map grows its grass in the same places in both games.</p>
+<a href="foliage-art.html">Foliage sprites</a> · <a href="environment-art.html">Environment catalogue</a> · <a href="index.html">← Game</a></header>
+
+<nav aria-label="Preview controls">
+ <label>Zoom <input id="zoom" type="range" min=".15" max="2.4" step=".05" value="1.2"></label>
+ <span id="zoomOut">1.20</span>
+ <label>Fog <select id="fog"><option value="clear">Watched</option><option value="dim">Remembered, not watched</option></select></label>
+</nav>
+
+<h2>The same yard, before and after</h2>
+<canvas id="field" width="1360" height="620"></canvas>
+<p class="note" id="stats">…</p>
+
+<h2>Every variant, magnified</h2>
+<canvas id="strip" width="1360" height="520"></canvas>
+<p class="note">Six tuft designs and six undergrowth designs, drawn far above their on-screen size. In play a tuft is 5.6 to 9.0 px across and 3.4 to 6.7 px tall; a clump is 16.2 to 23.2 across and 18.9 to 39.4 tall. The middle clump of every woodland tile takes the pale tone, which is the one piece of the 3D branch's material assignment that survives into a painted sprite.</p>
+
+<h2>Where the numbers come from</h2>
+<dl>
+<dt>Placement</dt><dd><code>foliage-models.js</code> on <code>project/tactics-3d</code>, hash for hash: yard one tuft on a third of its tiles, grass and woodland two, woodland three undergrowth clumps.</dd>
+<dt>Height scale</dt><dd>One tile unit lifts 28·√2·cos 30° = 34.29 px, which is the 3D branch's own hybrid projection, so waist high there is waist high here.</dd>
+<dt>Palette</dt><dd>Measured off the artwork rather than chosen: <code>bush.png</code> averages #6a6135 in its top-left quadrant and #5d5530 in its bottom-right, and the commonest tones in <code>ground-grass.png</code> run #473b24 to #756937.</dd>
+<dt>Mechanics</dt><dd>None. Woodland already costs nine tiles of optical distance per tile crossed; this parcel adds no cover, no collision and no sight cost.</dd>
+</dl>
+</main>
+<script type="module">
+import {environmentRenderer} from './environment-renderer.js';
+import {paintGroundCover,groundCoverSprites,drawTuft,drawCover,TUFT_BOX,COVER_BOX,TUFT_VARIANTS,COVER_VARIANTS} from './ground-cover.js';
+import {tileKey} from './maps.js';
+
+const field=document.getElementById('field'),ctx=field.getContext('2d');
+const strip=document.getElementById('strip'),sctx=strip.getContext('2d');
+const COLS=11,ROWS=9;
+// Three bands, so one picture carries every terrain the parcel touches, plus a bare concrete tile.
+const terrain=Array.from({length:ROWS},(_,y)=>Array.from({length:COLS},()=>y<3?'yard':y<6?'ground-grass':'woodland'));
+terrain[4][5]='floor';
+const props=[{x:7,y:1,z:0,kind:'crate-wood'},{x:2,y:4,z:0,kind:'barrel-single'},{x:8,y:7,z:0,kind:'tree-broadleaf'}];
+const base={terrain,props,upper:[{},{}],edges:{}};
+const cover=groundCoverSprites((w,h)=>Object.assign(document.createElement('canvas'),{width:w,height:h}));
+const art=environmentRenderer(()=>draw(),id=>console.warn('missing artwork',id));
+
+function diamond(p,zoom,style){
+ ctx.fillStyle=style;ctx.beginPath();
+ ctx.moveTo(p.x,p.y-14*zoom);ctx.lineTo(p.x+28*zoom,p.y);ctx.lineTo(p.x,p.y+14*zoom);ctx.lineTo(p.x-28*zoom,p.y);
+ ctx.closePath();ctx.fill();
+}
+function panel(zoom,ox,oy,dressed,state){
+ const project=(x,y)=>({x:ox+(x-y)*28*zoom,y:oy+(x+y)*14*zoom});
+ for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+  const t=terrain[y][x],p=project(x,y),n=(x*37+y*13)%9;
+  diamond(p,zoom,t==='floor'?['#77745a','#7b765b','#736f56'][n%3]:['#6f7053','#737256','#696d51'][n%3]);
+  art.ground(ctx,project,zoom,x,y,t,(a,b)=>terrain[b]?.[a]||'void');
+  if(state.visible&&!state.visible.has(tileKey(x,y,0)))diamond(p,zoom,'#182c2899');
+ }
+ const drawn=dressed?paintGroundCover(ctx,{project,zoom,level:0,bounds:{x0:0,y0:0,x1:COLS-1,y1:ROWS-1},state},cover):0;
+ // Props last, the way a real frame does it: the dressing goes under them.
+ for(const q of props)art.prop(ctx,project,zoom,q);
+ ctx.fillStyle='#e8dcb4';ctx.font='15px system-ui,sans-serif';ctx.textAlign='center';
+ ctx.fillText(dressed?'with ground cover':'before',ox+(COLS-ROWS)*14*zoom,26);
+ ctx.textAlign='start';
+ return drawn;
+}
+
+function draw(){
+ const zoom=Number(document.getElementById('zoom').value);
+ document.getElementById('zoomOut').textContent=zoom.toFixed(2);
+ const dim=document.getElementById('fog').value==='dim';
+ const state={...base,seen:null,visible:dim?new Set():null};
+ // The picture grows with the zoom instead of clipping; the page scales it back down to fit. The
+ // headroom above the first tile is for the tallest prop in the fixture, which is a broadleaf tree.
+ const span=(COLS+ROWS-2)*28*zoom,pad=34,top=Math.round(52+78*zoom),bottom=Math.round(20+22*zoom);
+ field.width=Math.round(2*span+3*pad);field.height=Math.round(span/2+top+bottom);
+ ctx.fillStyle='#202c29';ctx.fillRect(0,0,field.width,field.height);
+ const oy=top,ox=Math.round(pad+(ROWS-1)*28*zoom);
+ panel(zoom,ox,oy,false,state);
+ const drawn=panel(zoom,ox+span+pad,oy,true,state);
+ document.getElementById('stats').textContent=
+  `${drawn} pieces drawn over ${COLS*ROWS} tiles at zoom ${zoom.toFixed(2)}, stamped from ${cover.size} cached bitmaps rendered at ${cover.step.toFixed(3)}x.`
+  +(drawn===0?'  Both kinds have faded out: tufts start at zoom .30 and undergrowth at .18.':'');
+ window.lastDrawn=drawn;
+}
+
+function drawStrip(){
+ sctx.fillStyle='#202c29';sctx.fillRect(0,0,strip.width,strip.height);
+ const tuftM=14,coverM=7;
+ for(let v=0;v<TUFT_VARIANTS;v++){
+  sctx.setTransform(tuftM,0,0,tuftM,40+v*(TUFT_BOX.w+3)*tuftM,30);
+  drawTuft(sctx,TUFT_BOX.ox,TUFT_BOX.oy,TUFT_BOX.w,TUFT_BOX.h,v);
+ }
+ for(let v=0;v<COVER_VARIANTS;v++){
+  sctx.setTransform(coverM,0,0,coverM,40+v*(COVER_BOX.w+3)*coverM,150);
+  drawCover(sctx,COVER_BOX.ox,COVER_BOX.oy,COVER_BOX.w,COVER_BOX.h,v,v===1);
+ }
+ sctx.setTransform(1,0,0,1,0,0);
+ sctx.fillStyle='#b9c0af';sctx.font='13px system-ui,sans-serif';
+ sctx.fillText('tufts, at 14x',40,175);
+ sctx.fillText('undergrowth, at 7x',40,150+COVER_BOX.oy*coverM+26);
+}
+
+for(const id of ['zoom','fog'])document.getElementById(id).addEventListener('input',draw);
+drawStrip();draw();
+// The renderer starts each image load on first use and returns false that time, so one pass draws an
+// almost empty canvas. onReady above redraws as each image lands; these are the backstop.
+setTimeout(draw,1500);setTimeout(()=>{draw();window.ready=true;},9000);
+window.grab=()=>field.toDataURL('image/png');
+</script></body></html>
